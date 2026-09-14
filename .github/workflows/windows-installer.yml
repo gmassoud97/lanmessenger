@@ -33,6 +33,7 @@ jobs:
           $vcpkg = Join-Path $env:RUNNER_TEMP 'vcpkg-openssl11'
           git clone --depth 1 --branch 2021.05.12 https://github.com/microsoft/vcpkg.git $vcpkg
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:VCPKG_ROOT = $vcpkg
           & (Join-Path $vcpkg 'bootstrap-vcpkg.bat') -disableMetrics
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           & (Join-Path $vcpkg 'vcpkg.exe') install openssl:x64-windows
