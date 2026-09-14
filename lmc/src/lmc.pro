@@ -152,7 +152,7 @@ win32-msvc* {
 
 win32: {
     CONFIG -= debug_and_release debug_and_release_target
-    LMCAPP_PATH = $$replace(OUT_PWD, lmc, lmcapp)
+    isEmpty(LMCAPP_PATH): LMCAPP_PATH = $$replace(OUT_PWD, lmc, lmcapp)
     LIBS += -L$$LMCAPP_PATH -llmcapp
 }
 unix:!symbian: {
@@ -168,8 +168,11 @@ INCLUDEPATH += $$PWD/../../lmcapp/include
 DEPENDPATH += $$PWD/../../lmcapp/include
 
 win32-msvc*: LIBS += advapi32.lib # for GetUserNameW(...) in Helper::getLogonName(..)
-win32: LIBS += -L$$PWD/../../openssl/lib/ -llibeay32
-unix:!symbian: LIBS += -L$$PWD/../../openssl/lib/ -lcrypto
 
-INCLUDEPATH += $$PWD/../../openssl/include
-DEPENDPATH += $$PWD/../../openssl/include
+# OPENSSL_ROOT_DIR can point to a current OpenSSL/vcpkg installation. Fall
+# back to the repository's historical sibling directory for old build setups.
+OPENSSL_PATH = $$(OPENSSL_ROOT_DIR)
+isEmpty(OPENSSL_PATH): OPENSSL_PATH = $$PWD/../../openssl
+INCLUDEPATH += $$OPENSSL_PATH/include
+DEPENDPATH += $$OPENSSL_PATH/include
+LIBS += -L$$OPENSSL_PATH/lib -llibcrypto
