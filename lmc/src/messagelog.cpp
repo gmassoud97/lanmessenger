@@ -26,6 +26,7 @@
 #include <QAction>
 #include <QScrollBar>
 #include <QTextBlock>
+#include <stdexcept>
 #include "messagelog.h"
 
 const QString acceptOp("accept");
