@@ -1,0 +1,122 @@
+name: Windows installer
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '5.15.2'
+          arch: win64_msvc2019_64
+          cache: true
+
+      - name: Install OpenSSL
+        shell: pwsh
+        run: |
+          # Qt 5.15.2 dynamically loads OpenSSL 1.1 on Windows. Current vcpkg
+          # supplies OpenSSL 3, which lets lmc link but makes QSslSocket report
+          # that SSL is unavailable at runtime. Pin the final vcpkg release
+          # containing OpenSSL 1.1.1k so both users of OpenSSL are compatible.
+          $vcpkg = Join-Path $env:RUNNER_TEMP 'vcpkg-openssl11'
+          git clone --depth 1 --branch 2021.05.12 https://github.com/microsoft/vcpkg.git $vcpkg
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:VCPKG_ROOT = $vcpkg
+          & (Join-Path $vcpkg 'bootstrap-vcpkg.bat') -disableMetrics
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & (Join-Path $vcpkg 'vcpkg.exe') install openssl:x64-windows
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "OPENSSL_ROOT_DIR=$vcpkg\installed\x64-windows" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build LAN Messenger
+        shell: pwsh
+        run: |
+          $root = $env:GITHUB_WORKSPACE
+          $build = Join-Path $root 'build'
+          $libOut = Join-Path $build 'lib'
+          $appOut = Join-Path $build 'app'
+          New-Item -ItemType Directory -Force $libOut, $appOut | Out-Null
+
+          New-Item -ItemType Directory -Force (Join-Path $build 'lmcapp') | Out-Null
+          Push-Location (Join-Path $build 'lmcapp')
+          qmake (Join-Path $root 'lmcapp\src\lmcapp.pro') CONFIG+=release "DESTDIR=$libOut"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          nmake
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Pop-Location
+
+          New-Item -ItemType Directory -Force (Join-Path $build 'lmc') | Out-Null
+          Push-Location (Join-Path $build 'lmc')
+          qmake (Join-Path $root 'lmc\src\lmc.pro') CONFIG+=release "DESTDIR=$appOut" "LMCAPP_PATH=$libOut"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          nmake
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Pop-Location
+
+      - name: Package application
+        shell: pwsh
+        run: |
+          $root = $env:GITHUB_WORKSPACE
+          $app = Join-Path $root 'build\app'
+          $lib = Join-Path $root 'build\lib'
+          $source = Join-Path $root 'lmc\src'
+
+          $lmcExe = Get-ChildItem -Path $app -Filter lmc.exe -Recurse | Select-Object -First 1
+          if (-not $lmcExe) { throw 'lmc.exe was not produced' }
+          if ($lmcExe.DirectoryName -ne $app) { Copy-Item $lmcExe.FullName $app -Force }
+
+          Get-ChildItem -Path $lib -Filter 'lmcapp*.dll' -Recurse | Copy-Item -Destination $app -Force
+          Get-ChildItem -Path "$env:OPENSSL_ROOT_DIR\bin" -Filter 'libcrypto*.dll' | Copy-Item -Destination $app -Force
+          Get-ChildItem -Path "$env:OPENSSL_ROOT_DIR\bin" -Filter 'libssl*.dll' | Copy-Item -Destination $app -Force
+          windeployqt --release --compiler-runtime --no-translations (Join-Path $app 'lmc.exe')
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+          $requiredSslDlls = @('libcrypto-1_1-x64.dll', 'libssl-1_1-x64.dll')
+          foreach ($dll in $requiredSslDlls) {
+            if (-not (Test-Path (Join-Path $app $dll))) {
+              throw "Required Qt/OpenSSL runtime DLL was not packaged: $dll"
+            }
+          }
+
+          New-Item -ItemType Directory -Force (Join-Path $app 'lang'), (Join-Path $app 'sounds') | Out-Null
+          Get-ChildItem -Path $source -Filter '*.ts' | ForEach-Object {
+            lrelease $_.FullName -qm (Join-Path $app ('lang\' + $_.BaseName + '.qm'))
+          }
+          Copy-Item (Join-Path $source 'resources\lang\system') (Join-Path $app 'lang\system') -Recurse -Force
+          Copy-Item (Join-Path $source 'resources\sounds\*') (Join-Path $app 'sounds') -Recurse -Force
+          Copy-Item (Join-Path $source 'resources\text\license.txt') (Join-Path $app 'COPYING.txt') -Force
+          rcc -binary (Join-Path $source 'resource.qrc') -o (Join-Path $app 'lmc.rcc')
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+          Compress-Archive -Path (Join-Path $app '*') -DestinationPath (Join-Path $root 'LAN-Messenger-Searchable-History-Portable.zip') -Force
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          $makensis = 'C:\Program Files (x86)\NSIS\makensis.exe'
+          $app = Join-Path $env:GITHUB_WORKSPACE 'build\app'
+          $output = Join-Path $env:GITHUB_WORKSPACE 'LAN-Messenger-Searchable-History-Setup.exe'
+          & $makensis "/DBuildDir=$app" "/DOutputFile=$output" (Join-Path $env:GITHUB_WORKSPACE 'lmc\setup\win32\setup-modern.nsi')
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: LAN-Messenger-Windows
+          path: |
+            LAN-Messenger-Searchable-History-Setup.exe
+            LAN-Messenger-Searchable-History-Portable.zip
+          if-no-files-found: error

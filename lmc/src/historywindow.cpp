@@ -23,6 +23,10 @@
 
 
 #include <QDesktopWidget>
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QSaveFile>
+#include <QTextDocument>
 #include "historywindow.h"
 
 lmcHistoryWindow::lmcHistoryWindow(QWidget *parent, Qt::WindowFlags flags) : QWidget(parent, flags) {
@@ -45,9 +49,13 @@ lmcHistoryWindow::lmcHistoryWindow(QWidget *parent, Qt::WindowFlags flags) : QWi
 	connect(ui.tvMsgList, SIGNAL(currentItemChanged(QTreeWidgetItem*, QTreeWidgetItem*)),
 		this, SLOT(tvMsgList_currentItemChanged(QTreeWidgetItem*, QTreeWidgetItem*)));
 	connect(ui.btnClearHistory, SIGNAL(clicked()), this, SLOT(btnClearHistory_clicked()));
+	connect(ui.txtSearch, SIGNAL(textChanged(QString)), this, SLOT(txtSearch_textChanged(QString)));
+	connect(ui.btnExportHistory, SIGNAL(clicked()), this, SLOT(btnExportHistory_clicked()));
 
     ui.tvMsgList->installEventFilter(this);
     pMessageLog->installEventFilter(this);
+	ui.txtSearch->installEventFilter(this);
+	ui.btnExportHistory->installEventFilter(this);
     ui.btnClearHistory->installEventFilter(this);
     ui.btnClose->installEventFilter(this);
 }
@@ -114,12 +122,49 @@ void lmcHistoryWindow::tvMsgList_currentItemChanged(QTreeWidgetItem* current, QT
 		QString data = History::getMessage(offset);
 
 		pMessageLog->setHtml(data);
+		highlightSearchText();
+	} else {
+		pMessageLog->setHtml("<html></html>");
 	}
 }
 
 void lmcHistoryWindow::btnClearHistory_clicked(void) {
 	QFile::remove(History::historyFile());
 	displayList();
+}
+
+void lmcHistoryWindow::txtSearch_textChanged(const QString& text) {
+	populateList(text.trimmed());
+}
+
+void lmcHistoryWindow::btnExportHistory_clicked(void) {
+	QString fileName = QFileDialog::getSaveFileName(this, tr("Export Message History"),
+		QString("LAN-Messenger-History-%1.txt").arg(QDate::currentDate().toString("yyyy-MM-dd")),
+		tr("Text files (*.txt);;All files (*)"));
+	if(fileName.isEmpty())
+		return;
+
+	QByteArray output;
+	for(int index = 0; index < msgList.count(); index++) {
+		const MsgInfo& info = msgList[index];
+		output.append("============================================================\r\n");
+		output.append(info.name.toUtf8());
+		output.append(" - ");
+		output.append(info.date.toString(Qt::ISODate).toUtf8());
+		output.append("\r\n============================================================\r\n");
+		output.append(messagePlainText(info.offset).toUtf8());
+		output.append("\r\n\r\n");
+	}
+
+	QSaveFile file(fileName);
+	if(!file.open(QIODevice::WriteOnly) || file.write(output) != output.size() || !file.commit()) {
+		QMessageBox::warning(this, tr("Export Message History"),
+			tr("LAN Messenger could not write the history file."));
+		return;
+	}
+
+	QMessageBox::information(this, tr("Export Message History"),
+		tr("Message history was exported successfully."));
 }
 
 void lmcHistoryWindow::setUIText(void) {
@@ -130,17 +175,29 @@ void lmcHistoryWindow::setUIText(void) {
 
 void lmcHistoryWindow::displayList(void) {
 	pMessageLog->setHtml("<html></html>");
-	ui.tvMsgList->clear();
 	msgList.clear();
+	messageTextCache.clear();
 
 	msgList = History::getList();
+	populateList(ui.txtSearch->text().trimmed());
+	ui.btnExportHistory->setEnabled(!msgList.isEmpty());
+}
+
+void lmcHistoryWindow::populateList(const QString& searchText) {
+	ui.tvMsgList->clear();
 
 	for(int index = 0; index < msgList.count(); index++) {
+		const MsgInfo& info = msgList[index];
+		if(!searchText.isEmpty() &&
+			!info.name.contains(searchText, Qt::CaseInsensitive) &&
+			!messagePlainText(info.offset).contains(searchText, Qt::CaseInsensitive))
+			continue;
+
 		lmcHistoryTreeWidgetItem* pItem = new lmcHistoryTreeWidgetItem();
-		pItem->setText(0, msgList[index].name);
-		pItem->setText(1, msgList[index].date.toString(Qt::SystemLocaleDate));
-		pItem->setData(0, DataRole, msgList[index].offset);
-		pItem->setData(1, DataRole, msgList[index].date);
+		pItem->setText(0, info.name);
+		pItem->setText(1, info.date.toString(Qt::SystemLocaleDate));
+		pItem->setData(0, DataRole, info.offset);
+		pItem->setData(1, DataRole, info.date);
 		pItem->setSizeHint(0, QSize(0, 20));
 		ui.tvMsgList->addTopLevelItem(pItem);
 	}
@@ -149,4 +206,39 @@ void lmcHistoryWindow::displayList(void) {
 
 	if(ui.tvMsgList->topLevelItemCount() > 0)
 		ui.tvMsgList->setCurrentItem(ui.tvMsgList->topLevelItem(0));
+	else
+		pMessageLog->setHtml("<html></html>");
+}
+
+QString lmcHistoryWindow::messagePlainText(qint64 offset) {
+	if(messageTextCache.contains(offset))
+		return messageTextCache.value(offset);
+
+	QTextDocument document;
+	document.setHtml(History::getMessage(offset));
+	QString text = document.toPlainText();
+	messageTextCache.insert(offset, text);
+	return text;
+}
+
+void lmcHistoryWindow::highlightSearchText(void) {
+	QList<QTextEdit::ExtraSelection> selections;
+	QString searchText = ui.txtSearch->text().trimmed();
+	if(!searchText.isEmpty()) {
+		QTextCursor cursor(pMessageLog->document());
+		QTextCharFormat format;
+		format.setBackground(QColor(255, 235, 59));
+		format.setForeground(Qt::black);
+
+		while(!(cursor = pMessageLog->document()->find(searchText, cursor)).isNull()) {
+			QTextEdit::ExtraSelection selection;
+			selection.cursor = cursor;
+			selection.format = format;
+			selections.append(selection);
+		}
+	}
+
+	pMessageLog->setExtraSelections(selections);
+	if(!selections.isEmpty())
+		pMessageLog->setTextCursor(selections.first().cursor);
 }

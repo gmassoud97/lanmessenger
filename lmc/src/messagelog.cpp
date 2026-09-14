@@ -26,6 +26,7 @@
 #include <QAction>
 #include <QScrollBar>
 #include <QTextBlock>
+#include <stdexcept>
 #include "messagelog.h"
 
 const QString acceptOp("accept");
@@ -171,6 +172,7 @@ void lmcMessageLog::appendMessageLog(MessageType type, QString* lpszUserId, QStr
         html = getFileMessageText(type, lpszUserName, pMessage, bReload);
 		lastId = QString::null;
         appendMessageLog(&html, MT_File, new QTextBlockData(id));
+		hasData = true;
 		break;
 	case MT_Join:
 	case MT_Leave:
@@ -190,6 +192,8 @@ void lmcMessageLog::appendMessageLog(MessageType type, QString* lpszUserId, QStr
 
 	if(!bReload && addToLog && pMessage) {
 		XmlMessage xmlMessage = pMessage->clone();
+		if((type == MT_File || type == MT_Folder) && xmlMessage.header(XN_TIME).isEmpty())
+			xmlMessage.addHeader(XN_TIME, QString::number(QDateTime::currentDateTimeUtc().toMSecsSinceEpoch()));
 		QString userId = lpszUserId ? *lpszUserId : QString::null;
 		QString userName = lpszUserName ? *lpszUserName : QString::null;
 		messageLog.append(SingleMessage(type, userId, userName, xmlMessage, id));
@@ -208,6 +212,7 @@ void lmcMessageLog::updateFileMessage(FileMode mode, FileOp op, QString fileId)
 			xmlMessage.removeData(XN_FILEOP);
 			xmlMessage.addData(XN_FILEOP, FileOpNames[op]);
 			msg.message = xmlMessage;
+			messageLog[index] = msg;
 
             QString html = getFileMessageText(msg.type, &msg.userName, &msg.message);
             replaceMessageLog(MT_File, tempId, html);
@@ -264,6 +269,23 @@ QString lmcMessageLog::prepareMessageLogForSave(OutputFormat format) {
 					"<span class='time'>" + time.time().toString(Qt::SystemLocaleShortDate) + "</span>"\
 					"<span class='message'>" + messageText + "</span></p>";
 				html.append(htmlMsg);
+			} else if(msg.type == MT_File || msg.type == MT_Folder) {
+				time.setMSecsSinceEpoch(msg.message.header(XN_TIME).toLongLong());
+				FileMode mode = (FileMode)Helper::indexOf(FileModeNames, FM_Max, msg.message.data(XN_MODE));
+				FileOp op = (FileOp)Helper::indexOf(FileOpNames, FO_Max, msg.message.data(XN_FILEOP));
+				QString objectType = (msg.type == MT_Folder) ? tr("folder") : tr("file");
+				QString direction = (mode == FM_Send) ? tr("Outgoing") : tr("Incoming");
+				QString status = getFileStatusMessage(mode, op);
+				if(status.isEmpty())
+					status = tr("Requested");
+				QString fileName = msg.message.data(XN_FILENAME).toHtmlEscaped();
+				QString peerName = msg.userName.toHtmlEscaped();
+				QString htmlMsg =
+					"<p><span class='salutation'>" + direction + " " + objectType +
+					" - " + peerName + ":</span>" +
+					"<span class='time'>" + time.toString(Qt::SystemLocaleShortDate) + "</span>" +
+					"<span class='message'>" + fileName + " [" + status.toHtmlEscaped() + "]</span></p>";
+				html.append(htmlMsg);
 			}
 		}
 
@@ -278,6 +300,20 @@ QString lmcMessageLog::prepareMessageLogForSave(OutputFormat format) {
 				QString textMsg =
 					msg.userName + " [" + time.time().toString(Qt::SystemLocaleShortDate) + "]:\n" +
 					msg.message.data(XN_MESSAGE) + "\n\n";
+				text.append(textMsg);
+			} else if(msg.type == MT_File || msg.type == MT_Folder) {
+				time.setMSecsSinceEpoch(msg.message.header(XN_TIME).toLongLong());
+				FileMode mode = (FileMode)Helper::indexOf(FileModeNames, FM_Max, msg.message.data(XN_MODE));
+				FileOp op = (FileOp)Helper::indexOf(FileOpNames, FO_Max, msg.message.data(XN_FILEOP));
+				QString objectType = (msg.type == MT_Folder) ? tr("folder") : tr("file");
+				QString direction = (mode == FM_Send) ? tr("Outgoing") : tr("Incoming");
+				QString status = getFileStatusMessage(mode, op);
+				if(status.isEmpty())
+					status = tr("Requested");
+				QString textMsg = QString("%1 %2 - %3 [%4]:\n%5\n\n")
+					.arg(direction, objectType, msg.userName,
+						time.toString(Qt::SystemLocaleShortDate),
+						msg.message.data(XN_FILENAME) + " [" + status + "]");
 				text.append(textMsg);
 			}
 		}

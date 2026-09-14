@@ -27,6 +27,7 @@
 
 #include <QWidget>
 #include <QList>
+#include <QHash>
 #include <QTreeWidget>
 #include <qevent.h>
 #include "ui_historywindow.h"
@@ -55,15 +56,21 @@ protected:
 private slots:
 	void tvMsgList_currentItemChanged(QTreeWidgetItem* current, QTreeWidgetItem* previous);
 	void btnClearHistory_clicked(void);
+	void txtSearch_textChanged(const QString& text);
+	void btnExportHistory_clicked(void);
 
 private:
 	void setUIText(void);
 	void displayList(void);
+	void populateList(const QString& searchText = QString());
+	QString messagePlainText(qint64 offset);
+	void highlightSearchText(void);
 
 	Ui::HistoryWindow ui;
 	lmcSettings* pSettings;
 	lmcMessageLog* pMessageLog;
 	QList<MsgInfo> msgList;
+	QHash<qint64, QString> messageTextCache;
 };
 
 #endif // HISTORYWINDOW_H

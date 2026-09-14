@@ -28,7 +28,17 @@
    </property>
    <property name="bottomMargin">
     <number>3</number>
-   </property>
+  </property>
+   <item>
+    <widget class="QLineEdit" name="txtSearch">
+     <property name="placeholderText">
+      <string>Search names and messages...</string>
+     </property>
+     <property name="clearButtonEnabled">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
    <item>
     <widget class="QSplitter" name="splitter">
      <property name="sizePolicy">
@@ -135,6 +145,13 @@
       </widget>
      </item>
      <item>
+      <widget class="QPushButton" name="btnExportHistory">
+       <property name="text">
+        <string>Export History...</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <spacer name="horizontalSpacer">
        <property name="orientation">
         <enum>Qt::Horizontal</enum>
@@ -163,7 +180,9 @@
  </widget>
  <layoutdefault spacing="6" margin="11"/>
  <tabstops>
+  <tabstop>txtSearch</tabstop>
   <tabstop>tvMsgList</tabstop>
+  <tabstop>btnExportHistory</tabstop>
   <tabstop>btnClose</tabstop>
   <tabstop>btnClearHistory</tabstop>
  </tabstops>
