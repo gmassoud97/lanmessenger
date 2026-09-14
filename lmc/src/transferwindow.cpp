@@ -109,9 +109,10 @@ void lmcTransferWindow::createTransfer(MessageType type, FileMode mode, QString*
 		fileView.mode = FileView::TM_Receive;
         fileView.state = FileView::TS_Receive;
 	}
-	fileView.fileDisplay = fileView.fileName + " (" + fileView.sizeDisplay + ")";
+	fileView.startTime = QDateTime::currentDateTime();
+	fileView.fileDisplay = fileView.fileName + " (" + fileView.sizeDisplay + ") - " +
+		fileView.startTime.toString("yyyy-MM-dd HH:mm");
 	fileView.icon = getIcon(fileView.filePath);
-    fileView.startTime = QDateTime::currentDateTime();
     ui.lvTransferList->insertItem(0, &fileView);
     ui.lvTransferList->setCurrentRow(0);
 }
