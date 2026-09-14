@@ -48,7 +48,24 @@ public :
 
 	EVP_CIPHER_CTX_wrapper() {
 		ctx = EVP_CIPHER_CTX_new();
-		EVP_CIPHER_CTX_init(ctx);
+	}
+
+	EVP_CIPHER_CTX_wrapper(const EVP_CIPHER_CTX_wrapper& other) {
+		ctx = EVP_CIPHER_CTX_new();
+		if(ctx && other.ctx)
+			EVP_CIPHER_CTX_copy(ctx, other.ctx);
+	}
+
+	EVP_CIPHER_CTX_wrapper& operator=(const EVP_CIPHER_CTX_wrapper& other) {
+		if(this != &other) {
+			if(!ctx)
+				ctx = EVP_CIPHER_CTX_new();
+			else
+				EVP_CIPHER_CTX_reset(ctx);
+			if(ctx && other.ctx)
+				EVP_CIPHER_CTX_copy(ctx, other.ctx);
+		}
+		return *this;
 	}
 
 	~EVP_CIPHER_CTX_wrapper() {
