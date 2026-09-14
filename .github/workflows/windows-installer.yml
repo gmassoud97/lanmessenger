@@ -26,8 +26,18 @@ jobs:
       - name: Install OpenSSL
         shell: pwsh
         run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install openssl:x64-windows
-          "OPENSSL_ROOT_DIR=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows" | Out-File -FilePath $env:GITHUB_ENV -Append
+          # Qt 5.15.2 dynamically loads OpenSSL 1.1 on Windows. Current vcpkg
+          # supplies OpenSSL 3, which lets lmc link but makes QSslSocket report
+          # that SSL is unavailable at runtime. Pin the final vcpkg release
+          # containing OpenSSL 1.1.1k so both users of OpenSSL are compatible.
+          $vcpkg = Join-Path $env:RUNNER_TEMP 'vcpkg-openssl11'
+          git clone --depth 1 --branch 2021.05.12 https://github.com/microsoft/vcpkg.git $vcpkg
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & (Join-Path $vcpkg 'bootstrap-vcpkg.bat') -disableMetrics
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & (Join-Path $vcpkg 'vcpkg.exe') install openssl:x64-windows
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "OPENSSL_ROOT_DIR=$vcpkg\installed\x64-windows" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Build LAN Messenger
         shell: pwsh
@@ -68,8 +78,16 @@ jobs:
 
           Get-ChildItem -Path $lib -Filter 'lmcapp*.dll' -Recurse | Copy-Item -Destination $app -Force
           Get-ChildItem -Path "$env:OPENSSL_ROOT_DIR\bin" -Filter 'libcrypto*.dll' | Copy-Item -Destination $app -Force
+          Get-ChildItem -Path "$env:OPENSSL_ROOT_DIR\bin" -Filter 'libssl*.dll' | Copy-Item -Destination $app -Force
           windeployqt --release --compiler-runtime --no-translations (Join-Path $app 'lmc.exe')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+          $requiredSslDlls = @('libcrypto-1_1-x64.dll', 'libssl-1_1-x64.dll')
+          foreach ($dll in $requiredSslDlls) {
+            if (-not (Test-Path (Join-Path $app $dll))) {
+              throw "Required Qt/OpenSSL runtime DLL was not packaged: $dll"
+            }
+          }
 
           New-Item -ItemType Directory -Force (Join-Path $app 'lang'), (Join-Path $app 'sounds') | Out-Null
           Get-ChildItem -Path $source -Filter '*.ts' | ForEach-Object {
