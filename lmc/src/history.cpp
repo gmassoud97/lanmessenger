@@ -5,26 +5,18 @@
 ** Copyright (c) 2010 - 2012 Qualia Digital Solutions.
 ** 
 ** Contact:  qualiatech@gmail.com
-** 
+**
 ** LAN Messenger is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
 ** the Free Software Foundation, either version 3 of the License, or
 ** (at your option) any later version.
 **
-** LAN Messenger is distributed in the hope that it will be useful,
-** but WITHOUT ANY WARRANTY; without even the implied warranty of
-** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-** GNU General Public License for more details.
-**
-** You should have received a copy of the GNU General Public License
-** along with LAN Messenger.  If not, see <http://www.gnu.org/licenses/>.
-**
 ****************************************************************************/
-
 
 #include <QFileInfo>
 #include <QDir>
 #include <QDesktopServices>
+#include <QSaveFile>
 #include <QSet>
 #include "history.h"
 
@@ -242,4 +234,59 @@ QString History::getMessage(qint64 offset) {
 
 	file.close();
 	return data;
+}
+
+bool History::remove(qint64 offset) {
+	QList<MsgInfo> records = getList();
+	if(records.isEmpty())
+		return false;
+
+	bool found = false;
+	struct HistoryRecord {
+		QString name;
+		QDateTime date;
+		QString data;
+	};
+	QList<HistoryRecord> keep;
+
+	for(int i = 0; i < records.count(); ++i) {
+		const MsgInfo& info = records.at(i);
+		if(info.offset == offset) {
+			found = true;
+			continue;
+		}
+		HistoryRecord record;
+		record.name = info.name;
+		record.date = info.date;
+		record.data = getMessage(info.offset);
+		keep.append(record);
+	}
+
+	if(!found)
+		return false;
+
+	QString path = historyFile();
+	QSaveFile file(path);
+	if(!file.open(QIODevice::WriteOnly))
+		return false;
+
+	QDataStream stream(&file);
+	DBHeader header(HC_DBMARKER, HC_HDRSIZE, HC_VERSION, 0, 0, 0);
+	writeHeader(&stream, &header);
+
+	qint64 previousIndex = 0;
+	for(int i = 0; i < keep.count(); ++i) {
+		QString data = keep[i].data;
+		qint64 dataPos = insertData(&stream, &data);
+		qint64 newIndex = insertIndex(&stream, dataPos, keep[i].name, keep[i].date);
+		updateIndex(&stream, previousIndex, newIndex);
+		if(header.first == 0)
+			header.first = newIndex;
+		header.last = newIndex;
+		header.count++;
+		previousIndex = newIndex;
+	}
+
+	writeHeader(&stream, &header);
+	return stream.status() == QDataStream::Ok && file.commit();
 }
