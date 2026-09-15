@@ -5,22 +5,13 @@
 ** Copyright (c) 2010 - 2012 Qualia Digital Solutions.
 ** 
 ** Contact:  qualiatech@gmail.com
-** 
+**
 ** LAN Messenger is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
 ** the Free Software Foundation, either version 3 of the License, or
 ** (at your option) any later version.
 **
-** LAN Messenger is distributed in the hope that it will be useful,
-** but WITHOUT ANY WARRANTY; without even the implied warranty of
-** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-** GNU General Public License for more details.
-**
-** You should have received a copy of the GNU General Public License
-** along with LAN Messenger.  If not, see <http://www.gnu.org/licenses/>.
-**
 ****************************************************************************/
-
 
 #include <QDesktopWidget>
 #include <QFileDialog>
@@ -28,11 +19,11 @@
 #include <QSaveFile>
 #include <QTextDocument>
 #include "historywindow.h"
+#include "strings.h"
 
 lmcHistoryWindow::lmcHistoryWindow(QWidget *parent, Qt::WindowFlags flags) : QWidget(parent, flags) {
 	ui.setupUi(this);
 
-	//	Destroy the window when it closes
 	setAttribute(Qt::WA_DeleteOnClose, true);
 
 	pMessageLog = new lmcMessageLog(ui.fraMessageLog);
@@ -49,12 +40,14 @@ lmcHistoryWindow::lmcHistoryWindow(QWidget *parent, Qt::WindowFlags flags) : QWi
 	connect(ui.tvMsgList, SIGNAL(currentItemChanged(QTreeWidgetItem*, QTreeWidgetItem*)),
 		this, SLOT(tvMsgList_currentItemChanged(QTreeWidgetItem*, QTreeWidgetItem*)));
 	connect(ui.btnClearHistory, SIGNAL(clicked()), this, SLOT(btnClearHistory_clicked()));
+	connect(ui.btnDeleteHistory, SIGNAL(clicked()), this, SLOT(btnDeleteHistory_clicked()));
 	connect(ui.txtSearch, SIGNAL(textChanged(QString)), this, SLOT(txtSearch_textChanged(QString)));
 	connect(ui.btnExportHistory, SIGNAL(clicked()), this, SLOT(btnExportHistory_clicked()));
 
     ui.tvMsgList->installEventFilter(this);
     pMessageLog->installEventFilter(this);
 	ui.txtSearch->installEventFilter(this);
+	ui.btnDeleteHistory->installEventFilter(this);
 	ui.btnExportHistory->installEventFilter(this);
     ui.btnClearHistory->installEventFilter(this);
     ui.btnClose->installEventFilter(this);
@@ -90,13 +83,16 @@ void lmcHistoryWindow::settingsChanged(void) {
 }
 
 bool lmcHistoryWindow::eventFilter(QObject* pObject, QEvent* pEvent) {
-    Q_UNUSED(pObject);
     if(pEvent->type() == QEvent::KeyPress) {
         QKeyEvent* pKeyEvent = static_cast<QKeyEvent*>(pEvent);
         if(pKeyEvent->key() == Qt::Key_Escape) {
             close();
             return true;
         }
+		if(pObject == ui.tvMsgList && pKeyEvent->key() == Qt::Key_Delete) {
+			deleteSelectedHistory();
+			return true;
+		}
     }
 
     return false;
@@ -116,6 +112,7 @@ void lmcHistoryWindow::changeEvent(QEvent* pEvent) {
 
 void lmcHistoryWindow::tvMsgList_currentItemChanged(QTreeWidgetItem* current, QTreeWidgetItem* previous) {
     Q_UNUSED(previous);
+	ui.btnDeleteHistory->setEnabled(current != NULL);
 
 	if(current) {
 		qint64 offset = current->data(0, DataRole).toLongLong();
@@ -129,8 +126,40 @@ void lmcHistoryWindow::tvMsgList_currentItemChanged(QTreeWidgetItem* current, QT
 }
 
 void lmcHistoryWindow::btnClearHistory_clicked(void) {
+	if(QMessageBox::warning(this, tr("Clear Message History"),
+		tr("Are you sure you want to delete all message history? This cannot be undone."),
+		QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes)
+		return;
+
 	QFile::remove(History::historyFile());
 	displayList();
+}
+
+void lmcHistoryWindow::btnDeleteHistory_clicked(void) {
+	deleteSelectedHistory();
+}
+
+bool lmcHistoryWindow::deleteSelectedHistory(void) {
+	QTreeWidgetItem* current = ui.tvMsgList->currentItem();
+	if(!current)
+		return false;
+
+	QString name = current->text(0);
+	QString date = current->text(1);
+	if(QMessageBox::question(this, tr("Delete History Record"),
+		tr("Delete the selected history record for %1 from %2?").arg(name, date),
+		QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+		return false;
+
+	qint64 offset = current->data(0, DataRole).toLongLong();
+	if(!History::remove(offset)) {
+		QMessageBox::warning(this, tr("Delete History Record"),
+			tr("The selected history record could not be deleted."));
+		return false;
+	}
+
+	displayList();
+	return true;
 }
 
 void lmcHistoryWindow::txtSearch_textChanged(const QString& text) {
@@ -159,7 +188,7 @@ void lmcHistoryWindow::btnExportHistory_clicked(void) {
 	QSaveFile file(fileName);
 	if(!file.open(QIODevice::WriteOnly) || file.write(output) != output.size() || !file.commit()) {
 		QMessageBox::warning(this, tr("Export Message History"),
-			tr("LAN Messenger could not write the history file."));
+			tr("%1 could not write the history file.").arg(lmcStrings::appName()));
 		return;
 	}
 
@@ -181,6 +210,8 @@ void lmcHistoryWindow::displayList(void) {
 	msgList = History::getList();
 	populateList(ui.txtSearch->text().trimmed());
 	ui.btnExportHistory->setEnabled(!msgList.isEmpty());
+	ui.btnClearHistory->setEnabled(!msgList.isEmpty());
+	ui.btnDeleteHistory->setEnabled(ui.tvMsgList->currentItem() != NULL);
 }
 
 void lmcHistoryWindow::populateList(const QString& searchText) {
@@ -206,8 +237,10 @@ void lmcHistoryWindow::populateList(const QString& searchText) {
 
 	if(ui.tvMsgList->topLevelItemCount() > 0)
 		ui.tvMsgList->setCurrentItem(ui.tvMsgList->topLevelItem(0));
-	else
+	else {
 		pMessageLog->setHtml("<html></html>");
+		ui.btnDeleteHistory->setEnabled(false);
+	}
 }
 
 QString lmcHistoryWindow::messagePlainText(qint64 offset) {

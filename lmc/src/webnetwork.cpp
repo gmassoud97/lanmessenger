@@ -60,18 +60,21 @@ void lmcWebNetwork::slotError(QNetworkReply::NetworkError code) {
 }
 
 void lmcWebNetwork::replyFinished(QNetworkReply *reply) {
-    if(reply->error() != QNetworkReply::NoError)
+	if(reply->error() != QNetworkReply::NoError) {
+		reply->deleteLater();
+		active = false;
 		return;
+	}
 
 	// check if there was an HTTP redirection
 	QVariant redirect = reply->attribute(QNetworkRequest::RedirectionTargetAttribute);
 	if(!redirect.isNull()) {
 		// send a new request to the redirected url
-		sendMessage(redirect.toUrl());
+		sendMessage(reply->url().resolved(redirect.toUrl()));
 	} else {
 		// no redirection, get the data from the reply
 		QByteArray data = reply->readAll();
-		QString szMessage = QString(data.constData());
+		QString szMessage = QString::fromUtf8(data.constData(), data.length());
 		emit messageReceived(&szMessage);
 		reply->close();
 	}

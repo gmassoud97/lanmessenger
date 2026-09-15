@@ -194,7 +194,7 @@ void lmcMainWindow::addUser(User* pUser) {
 	pItem->setData(0, SubtextRole, pUser->note);
     pItem->setData(0, CapsRole, pUser->caps);
 	pItem->setText(0, pUser->name);
-	if(statusToolTip)
+	if(statusToolTip && index >= 0)
 		pItem->setToolTip(0, lmcStrings::statusDesc()[index]);
 	
 	if(index != -1)
@@ -227,7 +227,7 @@ void lmcMainWindow::updateUser(User* pUser) {
 		pItem->setData(0, StatusRole, index);
 		pItem->setData(0, SubtextRole, pUser->note);
 		pItem->setText(0, pUser->name);
-		if(statusToolTip)
+		if(statusToolTip && index >= 0)
 			pItem->setToolTip(0, lmcStrings::statusDesc()[index]);
 		QTreeWidgetItem* pGroupItem = pItem->parent();
 		pGroupItem->sortChildren(0, Qt::AscendingOrder);
@@ -297,7 +297,9 @@ void lmcMainWindow::settingsChanged(bool init) {
 //			QSize itemSize = ui.tvUserList->view() == ULV_Detailed ? QSize(0, 36) : QSize(0, 20);
 //			childItem->setSizeHint(0, itemSize);
 
-			QString toolTip = statusToolTip ? lmcStrings::statusDesc()[childItem->data(0, StatusRole).toInt()] : QString::null;
+			int statusIndex = childItem->data(0, StatusRole).toInt();
+			QString toolTip = (statusToolTip && statusIndex >= 0 && statusIndex < ST_COUNT)
+				? lmcStrings::statusDesc()[statusIndex] : QString::null;
 			childItem->setToolTip(0, toolTip);
 		}
 	}
@@ -890,7 +892,8 @@ void lmcMainWindow::setUIText(void) {
 		for(int childIndex = 0; childIndex < item->childCount(); childIndex++) {
 			QTreeWidgetItem*childItem = item->child(childIndex);
 			int statusIndex = childItem->data(0, StatusRole).toInt();
-			childItem->setToolTip(0, lmcStrings::statusDesc()[statusIndex]);
+			childItem->setToolTip(0, (statusIndex >= 0 && statusIndex < ST_COUNT)
+				? lmcStrings::statusDesc()[statusIndex] : tr("Unknown"));
 		}
 	}
 

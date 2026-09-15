@@ -25,6 +25,7 @@
 #include "application.h"
 #include "lmc.h"
 #include "stdlocation.h"
+#include "strings.h"
 #include <QResource>
 #include <QMessageBox>
 
@@ -52,7 +53,7 @@ int showSwitches(void) {
 					"Some command line switches are mutually exclusive. If multiple switches\n" \
 					"are specified, they will take precedence in the order given above.\n" \
 					"Copyright (C) 2010-2012 Qualia Digital Solutions.\n";
-	QMessageBox::information(NULL, IDA_TITLE, msg, QMessageBox::Ok);
+	QMessageBox::information(NULL, lmcStrings::appName(), msg, QMessageBox::Ok);
 	return 0;
 }
 
@@ -114,11 +115,11 @@ int main(int argc, char *argv[]) {
 		return 1;
 
 #ifdef QT_NO_SSL
-    if(QMessageBox::critical(nullptr, IDA_TITLE, "Qt is compiled with QT_NO_SSL. Some functions will not work correctly. Quit application?", QMessageBox::Yes|QMessageBox::No) == QMessageBox::Yes)
+    if(QMessageBox::critical(nullptr, lmcStrings::appName(), "Qt is compiled with QT_NO_SSL. Some functions will not work correctly. Quit application?", QMessageBox::Yes|QMessageBox::No) == QMessageBox::Yes)
         return 2;
 #else
     if(!QSslSocket::supportsSsl()) {
-        if(QMessageBox::critical(nullptr, IDA_TITLE, "Messenger does not find ssl at startup. Probably missing openssl dll. Some functions will not work correctly. Quit application?", QMessageBox::Yes|QMessageBox::No) == QMessageBox::Yes)
+        if(QMessageBox::critical(nullptr, lmcStrings::appName(), "Messenger does not find ssl at startup. Probably missing openssl dll. Some functions will not work correctly. Quit application?", QMessageBox::Yes|QMessageBox::No) == QMessageBox::Yes)
             return 3;
     }
 #endif

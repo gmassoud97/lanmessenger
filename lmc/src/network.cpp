@@ -91,7 +91,8 @@ void lmcNetwork::start(void) {
 }
 
 void lmcNetwork::stop(void) {
-	pTimer->stop();
+	if(pTimer)
+		pTimer->stop();
 
 	pUdpNetwork->stop();
 	pTcpNetwork->stop();

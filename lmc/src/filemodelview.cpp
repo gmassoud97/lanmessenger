@@ -25,17 +25,43 @@
 #include <QtGui>
 #include <QPixmap>
 #include <QFileInfo>
+#include <QSaveFile>
 #include <math.h>
 
 #include "filemodelview.h"
+
+namespace {
+const quint32 TransferHistoryMagic = 0x4c4d4346; // LMCF
+const quint32 TransferHistoryVersion = 2;
+
+void restoreLegacyTransferDate(FileView& view) {
+	// The first searchable-history build temporarily stored the date at the
+	// end of fileDisplay. Preserve dates from those records while migrating
+	// them to the dedicated startTime field.
+	int separator = view.fileDisplay.lastIndexOf(" - ");
+	if(separator < 0)
+		return;
+
+	QString dateText = view.fileDisplay.mid(separator + 3);
+	QDateTime parsed = QDateTime::fromString(dateText, "yyyy-MM-dd HH:mm");
+	if(parsed.isValid()) {
+		view.startTime = parsed;
+		view.fileDisplay = view.fileDisplay.left(separator);
+	}
+}
+}
 
 /****************************************************************************
 **	Class: FileView
 **	Description: Takes care of rendering the item
 ****************************************************************************/
 FileView::FileView(QString id) {
+	type = 0;
+	fileSize = 0;
 	position = 0;
 	speed = 0;
+	mode = TM_Max;
+	state = TS_Max;
 	posDisplay = tr("0 bytes");
 	speedDisplay = tr("0 bytes/sec");
 	timeDisplay = tr("Calculating time");
@@ -44,15 +70,16 @@ FileView::FileView(QString id) {
 }
 
 QSize FileView::sizeHint() const {
+	const int rowHeight = startTime.isValid() ? 74 : 56;
 	switch(state) {
 	case TS_Wait:
 	case TS_Confirm:
 	case TS_Complete:
 	case TS_Cancel:
-		return QSize(0, 56);
+		return QSize(0, rowHeight);
 		break;
 	default:
-		return QSize(0, 56);
+		return QSize(0, rowHeight);
 		break;
 	}
 }
@@ -115,8 +142,15 @@ void FileView::paint(QPainter* painter, const QRect& rect, const QPalette& palet
 	text = painter->fontMetrics().elidedText(stateDisplay, Qt::ElideRight, textRect.width());
 	painter->drawText(textRect, textFlags, text);
 
+	if(startTime.isValid()) {
+		QString dateDisplay = tr("Date: %1").arg(startTime.toString("yyyy-MM-dd HH:mm"));
+		textRect = QRect(54, 54, rect.width() - 58, 18);
+		text = painter->fontMetrics().elidedText(dateDisplay, Qt::ElideRight, textRect.width());
+		painter->drawText(textRect, textFlags, text);
+	}
+
 	if(drawProgress) {
-		int spanAngle = ((double)position / (double)fileSize) * 360;
+		int spanAngle = fileSize > 0 ? ((double)position / (double)fileSize) * 360 : 0;
 
 		painter->setBrush(QBrush(QColor(230, 230, 230)));
 		painter->setPen(QPen(QColor(230, 230, 230)));
@@ -142,7 +176,7 @@ void FileView::paint(QPainter* painter, const QRect& rect, const QPalette& palet
 
 QDataStream &operator << (QDataStream &out, const FileView &view) {
 	out << view.id << qint32(view.mode) << view.filePath << view.userName << view.fileDisplay
-		<< qint32(view.state) << view.icon;
+		<< qint32(view.state) << view.icon << view.startTime;
 	return out;
 }
 
@@ -154,7 +188,8 @@ QDataStream &operator >> (QDataStream &in, FileView &view) {
 	QString fileDisplay;
 	qint32 state;
 	QPixmap icon;
-	in >> id >> mode >> filePath >> userName >> fileDisplay >> state >> icon;
+	QDateTime startTime;
+	in >> id >> mode >> filePath >> userName >> fileDisplay >> state >> icon >> startTime;
 	view = FileView(id);
 	view.mode = (FileView::TransferMode)mode;
 	view.filePath = filePath;
@@ -162,6 +197,7 @@ QDataStream &operator >> (QDataStream &in, FileView &view) {
 	view.fileDisplay = fileDisplay;
 	view.state = (FileView::TransferState)state;
 	view.icon = icon;
+	view.startTime = startTime;
 	return in;
 }
 
@@ -232,6 +268,8 @@ Qt::ItemFlags FileModel::flags(const QModelIndex &index) const {
 
 bool FileModel::insertRows(int position, int rows, const QModelIndex& index) {
 	Q_UNUSED(index);
+	if(position < 0 || position > transferList.size() || rows <= 0)
+		return false;
 	beginInsertRows(QModelIndex(), position, position + rows - 1);
 
 	for(int row = 0; row < rows; row++) {
@@ -245,6 +283,8 @@ bool FileModel::insertRows(int position, int rows, const QModelIndex& index) {
 
 bool FileModel::removeRows(int position, int rows, const QModelIndex& index) {
 	Q_UNUSED(index);
+	if(position < 0 || rows <= 0 || position + rows > transferList.size())
+		return false;
 	beginRemoveRows(QModelIndex(), position, position + rows - 1);
 
 	for(int row = 0; row < rows; row++)
@@ -255,7 +295,8 @@ bool FileModel::removeRows(int position, int rows, const QModelIndex& index) {
 }
 
 bool FileModel::setData(const QModelIndex &index, const QVariant &value, int role) {
-	if(index.isValid() && role == Qt::UserRole) {
+	if(index.isValid() && index.model() == this && index.row() >= 0 &&
+		index.row() < transferList.count() && role == Qt::UserRole) {
 		int row = index.row();
 		transferList[row] = value.value<FileView>();
 		emit dataChanged(index, index);
@@ -328,25 +369,82 @@ void FileModel::loadData(QString filePath) {
 		return;
 
 	QDataStream stream(&file);
-	stream >> transferList;
+	quint32 marker = 0;
+	stream >> marker;
+	if(marker == TransferHistoryMagic) {
+		quint32 version = 0;
+		stream >> version;
+		if(version == TransferHistoryVersion) {
+			quint32 count = 0;
+			stream >> count;
+			if(count <= 100000) {
+				for(quint32 index = 0; index < count; ++index) {
+					FileView view;
+					stream >> view;
+					if(stream.status() != QDataStream::Ok ||
+						view.mode < FileView::TM_Send || view.mode >= FileView::TM_Max ||
+						view.state < FileView::TS_Wait || view.state >= FileView::TS_Max) {
+						transferList.clear();
+						break;
+					}
+					if(view.state < FileView::TS_Complete)
+						view.state = FileView::TS_Abort;
+					transferList.append(view);
+				}
+			}
+		}
+	} else {
+		// Original transfer histories were an unversioned QList<FileView>.
+		// The first value is therefore the item count already read as marker.
+		const quint32 count = marker;
+		if(count <= 100000) {
+			for(quint32 index = 0; index < count; ++index) {
+				QString id;
+				qint32 mode;
+				QString filePath;
+				QString userName;
+				QString fileDisplay;
+				qint32 state;
+				QPixmap icon;
+				stream >> id >> mode >> filePath >> userName >> fileDisplay >> state >> icon;
+				if(stream.status() != QDataStream::Ok) {
+					transferList.clear();
+					break;
+				}
+
+				FileView view(id);
+				view.mode = (FileView::TransferMode)mode;
+				view.filePath = filePath;
+				view.userName = userName;
+				view.fileDisplay = fileDisplay;
+				if(mode < FileView::TM_Send || mode >= FileView::TM_Max ||
+					state < FileView::TS_Wait || state >= FileView::TS_Max) {
+					transferList.clear();
+					break;
+				}
+				view.state = (state < FileView::TS_Complete)
+					? FileView::TS_Abort : (FileView::TransferState)state;
+				view.icon = icon;
+				restoreLegacyTransferDate(view);
+				transferList.append(view);
+			}
+		}
+	}
 
 	file.close();
 }
 
 void FileModel::saveData(QString filePath) {
-	if(transferList.isEmpty())
-		return;
-
 	QDir dir = QFileInfo(filePath).dir();
 	if(!dir.exists())
 		dir.mkpath(dir.absolutePath());
 
-	QFile file(filePath);
+	QSaveFile file(filePath);
 	if(!file.open(QIODevice::WriteOnly))
 		return;
 
 	QDataStream stream(&file);
-	stream << transferList;
+	stream << TransferHistoryMagic << TransferHistoryVersion << transferList;
 
-	file.close();
+	file.commit();
 }
