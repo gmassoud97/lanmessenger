@@ -126,6 +126,11 @@ void lmcHistoryWindow::tvMsgList_currentItemChanged(QTreeWidgetItem* current, QT
 }
 
 void lmcHistoryWindow::btnClearHistory_clicked(void) {
+	if(QMessageBox::warning(this, tr("Clear Message History"),
+		tr("Are you sure you want to delete all message history? This cannot be undone."),
+		QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes)
+		return;
+
 	QFile::remove(History::historyFile());
 	displayList();
 }
