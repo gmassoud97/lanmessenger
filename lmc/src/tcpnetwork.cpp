@@ -24,6 +24,7 @@
 
 #include "trace.h"
 #include "tcpnetwork.h"
+#include <QTimer>
 
 lmcTcpNetwork::lmcTcpNetwork(void) {
 	sendList.clear();
@@ -209,6 +210,10 @@ void lmcTcpNetwork::server_newConnection(void) {
 	lmcTrace::write("New connection received");
 	QTcpSocket* socket = server->nextPendingConnection();
 	connect(socket, SIGNAL(readyRead()), this, SLOT(socket_readyRead()));
+	QTimer* headerTimer = new QTimer(socket);
+	headerTimer->setObjectName("lmcHeaderTimer");
+	headerTimer->setSingleShot(true);
+	connect(headerTimer, SIGNAL(timeout()), this, SLOT(socket_headerTimeout()));
 }
 
 void lmcTcpNetwork::socket_readyRead(void) {
@@ -244,6 +249,16 @@ void lmcTcpNetwork::processIncomingSocket(QTcpSocket* socket) {
 		if(matchedUserId.isEmpty()) {
 			if(socket->bytesAvailable() > 1024)
 				socket->disconnectFromHost();
+			else {
+				// Existing peers normally connect in response to our announcement,
+				// without announcing themselves first. The id has no delimiter, so
+				// wait briefly for this one small write to finish before accepting
+				// all buffered bytes as the peer id. Restarting the timer on each
+				// readyRead also handles a header split across TCP packets.
+				QTimer* headerTimer = socket->findChild<QTimer*>("lmcHeaderTimer");
+				if(headerTimer)
+					headerTimer->start(25);
+			}
 			return;
 		}
 		disconnect(socket, SIGNAL(readyRead()), this, SLOT(socket_readyRead()));
@@ -288,6 +303,29 @@ void lmcTcpNetwork::processIncomingSocket(QTcpSocket* socket) {
 		disconnect(socket, SIGNAL(readyRead()), this, SLOT(socket_readyRead()));
 		socket->disconnectFromHost();
 	}
+}
+
+void lmcTcpNetwork::socket_headerTimeout(void) {
+	QTimer* headerTimer = qobject_cast<QTimer*>(sender());
+	QTcpSocket* socket = headerTimer ? qobject_cast<QTcpSocket*>(headerTimer->parent()) : NULL;
+	if(!socket || socket->property("lmcHeaderAccepted").toBool())
+		return;
+
+	QByteArray header = socket->readAll();
+	if(!header.startsWith("MSG") || header.size() <= 3 || header.size() > 1024) {
+		socket->disconnectFromHost();
+		return;
+	}
+
+	QString userId = QString::fromLocal8Bit(header.mid(3));
+	if(userId.isEmpty()) {
+		socket->disconnectFromHost();
+		return;
+	}
+
+	disconnect(socket, SIGNAL(readyRead()), this, SLOT(socket_readyRead()));
+	socket->setProperty("lmcHeaderAccepted", true);
+	addMsgSocket(&userId, socket);
 }
 
 void lmcTcpNetwork::msgStream_connectionLost(QString* lpszUserId) {
