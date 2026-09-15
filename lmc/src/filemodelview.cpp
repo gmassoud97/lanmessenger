@@ -56,7 +56,7 @@ void restoreLegacyTransferDate(FileView& view) {
 **	Description: Takes care of rendering the item
 ****************************************************************************/
 FileView::FileView(QString id) {
-	type = MT_Blank;
+	type = 0;
 	fileSize = 0;
 	position = 0;
 	speed = 0;

@@ -284,7 +284,7 @@ bool lmcMessaging::addFileTransfer(FileMode fileMode, QString* lpszUserId, XmlMe
 			lmcTrace::write("Warning: Ignoring file transfer with an invalid size");
 			return false;
 		}
-		fileName = QFileInfo(QDir::fromNativeSeparators(pMessage->data(XN_FILENAME))).fileName();
+		QString fileName = QFileInfo(QDir::fromNativeSeparators(pMessage->data(XN_FILENAME))).fileName();
 		if(fileName.isEmpty()) {
 			lmcTrace::write("Warning: Ignoring file transfer with an invalid file name");
 			return false;
