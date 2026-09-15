@@ -25,6 +25,7 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QDesktopServices>
+#include <QSet>
 #include "history.h"
 
 QString History::historyFile(void) {
@@ -91,7 +92,11 @@ int History::save(QString user, QDateTime date, QString* lpszData) {
 	QDataStream stream(&file);
 
 	DBHeader header = readHeader(&stream);
-	if(header.marker.compare(HC_DBMARKER) != 0) {
+	if(header.marker.compare(HC_DBMARKER) != 0 || header.version != HC_VERSION ||
+		header.headerSize != HC_HDRSIZE || header.count < 0 ||
+		(header.count == 0 && (header.first != 0 || header.last != 0)) ||
+		(header.count > 0 && (header.first < header.headerSize || header.first >= file.size() ||
+			header.last < header.headerSize || header.last >= file.size()))) {
 		file.close();
 		return -1;
 	}
@@ -139,6 +144,8 @@ qint64 History::insertIndex(QDataStream* pStream, qint64 dataPos, QString user, 
 }
 
 void History::updateIndex(QDataStream* pStream, qint64 oldIndex, qint64 newIndex) {
+	if(oldIndex <= 0)
+		return;
 	pStream->device()->seek(oldIndex);
 
 	*pStream << QString(HC_IDMARKER);
@@ -161,21 +168,32 @@ QList<MsgInfo> History::getList(void) {
 	QDataStream stream(&file);
 
 	DBHeader header = readHeader(&stream);
+	if(stream.status() != QDataStream::Ok || header.marker != HC_DBMARKER ||
+		header.version != HC_VERSION || header.headerSize != HC_HDRSIZE ||
+		header.count < 0 || (header.count == 0 && (header.first != 0 || header.last != 0)))
+		return list;
 	qint64 next = header.first;
+	QSet<qint64> visited;
 	
 	QString marker;
 	qint64 offset;
 	qint64 date;
 	QString name;
 	
-	while(next != 0) {
-		stream.device()->seek(next);
+	while(next != 0 && list.count() < header.count) {
+		if(next < header.headerSize || next >= file.size() || visited.contains(next) ||
+			!stream.device()->seek(next))
+			break;
+		visited.insert(next);
 		MsgInfo info;
 		stream >> marker;
 		stream >> next;
 		stream >> offset;
 		stream >> date;
 		stream >> name;
+		if(stream.status() != QDataStream::Ok || marker != HC_IDMARKER ||
+			offset < header.headerSize || offset >= file.size())
+			break;
 		list.append(MsgInfo(name, QDateTime::fromMSecsSinceEpoch(date), offset));
 	}
 
@@ -197,14 +215,28 @@ QString History::getMessage(qint64 offset) {
 
 	QDataStream stream(&file);
 
+	if(offset < HC_HDRSIZE || offset >= file.size() || !stream.device()->seek(offset))
+		return data;
+
 	QString marker;
-	int length;
+	qint32 length;
+	quint32 encodedLength;
 	QByteArray buffer;
 
-	stream.device()->seek(offset);
 	stream >> marker;
 	stream >> length;
-	stream >> buffer;
+	if(stream.status() != QDataStream::Ok || marker != HC_DTMARKER || length < 0 ||
+		file.size() - file.pos() < (qint64)sizeof(quint32) + length)
+		return data;
+
+	stream >> encodedLength;
+	if(stream.status() != QDataStream::Ok || encodedLength != (quint32)length ||
+		file.size() - file.pos() < length)
+		return data;
+
+	buffer.resize(length);
+	if(length > 0 && stream.readRawData(buffer.data(), length) != length)
+		return QString();
 	
 	data = QString::fromUtf8(buffer, buffer.length());
 

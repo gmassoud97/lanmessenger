@@ -334,6 +334,12 @@ bool lmcMessaging::addUser(QString szUserId, QString szVersion, QString szAddres
 		userGroupMap.insert(szUserId, GRP_DEFAULT_ID);
 
 	int nAvatar = szAvatar.isNull() ? -1 : szAvatar.toInt();
+	int statusIndex = Helper::statusIndexFromCode(szStatus);
+	if(!szStatus.isNull() && statusIndex < 0) {
+		lmcTrace::write("Warning: Unknown status received for user " + szUserId);
+		szStatus = statusCode[0];
+		statusIndex = 0;
+	}
 
     userList.append(User(szUserId, szVersion, szAddress, szName, szStatus, userGroupMap[szUserId],
                          nAvatar, szNote, QString::null, szCaps));
@@ -343,7 +349,6 @@ bool lmcMessaging::addUser(QString szUserId, QString szVersion, QString szAddres
 		xmlMessage.addData(XN_STATUS, szStatus);
 		//	send a status message to app layer, this is different from announce message
 		emit messageReceived(MT_Status, &szUserId, &xmlMessage);
-		int statusIndex = Helper::statusIndexFromCode(szStatus);
 		if(statusType[statusIndex] == StatusTypeOffline) // offline status
 			return false;	//	no need to send a new user message to app layer
 	}
@@ -361,18 +366,22 @@ void lmcMessaging::updateUser(MessageType type, QString szUserId, QString szUser
 	switch(type) {
 	case MT_Status:
 		if(pUser->status.compare(szUserData) != 0) {
+			int newStatusIndex = Helper::statusIndexFromCode(szUserData);
+			if(newStatusIndex < 0) {
+				lmcTrace::write("Warning: Ignoring unknown status for user " + szUserId);
+				break;
+			}
 			QString oldStatus = pUser->status;
 			pUser->status = szUserData;
 
 			int statusIndex = Helper::statusIndexFromCode(oldStatus);
-			if(statusType[statusIndex] == StatusTypeOffline) // old status is offline
+			if(statusIndex >= 0 && statusType[statusIndex] == StatusTypeOffline) // old status is offline
 				emit messageReceived(MT_Announce, &szUserId, NULL);
 				
 			updateMsg.addData(XN_STATUS, pUser->status);
 			emit messageReceived(MT_Status, &szUserId, &updateMsg);
 
-			statusIndex = Helper::statusIndexFromCode(pUser->status);
-			if(statusType[statusIndex] == StatusTypeOffline) { // new status is offline
+			if(statusType[newStatusIndex] == StatusTypeOffline) { // new status is offline
 				// Send a dummy xml message. A non null xml message implies that the
 				// user is only in offline status, and not actually offline.
 				XmlMessage xmlMessage;

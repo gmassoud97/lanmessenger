@@ -28,6 +28,7 @@
 #include <QSaveFile>
 #include <QTextDocument>
 #include "historywindow.h"
+#include "strings.h"
 
 lmcHistoryWindow::lmcHistoryWindow(QWidget *parent, Qt::WindowFlags flags) : QWidget(parent, flags) {
 	ui.setupUi(this);
@@ -159,7 +160,7 @@ void lmcHistoryWindow::btnExportHistory_clicked(void) {
 	QSaveFile file(fileName);
 	if(!file.open(QIODevice::WriteOnly) || file.write(output) != output.size() || !file.commit()) {
 		QMessageBox::warning(this, tr("Export Message History"),
-			tr("LAN Messenger could not write the history file."));
+			tr("%1 could not write the history file.").arg(lmcStrings::appName()));
 		return;
 	}
 

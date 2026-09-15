@@ -136,7 +136,7 @@ void lmcMessageLog::appendMessageLog(MessageType type, QString* lpszUserId, QStr
         if(!caption.isNull()) {
 			html = themeData.stateMsg;
             html.replace("%iconpath%", "qrc" IDR_BLANK);
-			html.replace("%sender%", caption.arg(*lpszUserName));
+			html.replace("%sender%", caption.arg(lpszUserName->toHtmlEscaped()));
 			html.replace("%message%", "");
             appendMessageLog(&html, type);
 		}
@@ -151,7 +151,7 @@ void lmcMessageLog::appendMessageLog(MessageType type, QString* lpszUserId, QStr
 		fontStyle = getFontStyle(&font, &color, true);
 		decodeMessage(&message);
         html.replace("%iconpath%", "qrc" IDR_CRITICALMSG);
-		html.replace("%sender%", caption.arg(*lpszUserName));
+		html.replace("%sender%", caption.arg(lpszUserName->toHtmlEscaped()));
 		html.replace("%style%", fontStyle);
 		html.replace("%message%", message);
         appendMessageLog(&html, type);
@@ -181,7 +181,7 @@ void lmcMessageLog::appendMessageLog(MessageType type, QString* lpszUserId, QStr
 		if(!caption.isNull()) {
 			html = themeData.sysMsg;
             html.replace("%iconpath%", "qrc" IDR_BLANK);
-			html.replace("%sender%", caption.arg(*lpszUserName));
+			html.replace("%sender%", caption.arg(lpszUserName->toHtmlEscaped()));
 			html.replace("%message%", "");
             appendMessageLog(&html, type);
 		}
@@ -265,7 +265,7 @@ QString lmcMessageLog::prepareMessageLogForSave(OutputFormat format) {
 				QString messageText = msg.message.data(XN_MESSAGE);
 				decodeMessage(&messageText, true);
 				QString htmlMsg =
-					"<p><span class='salutation'>" + msg.userName + ":</span>"\
+					"<p><span class='salutation'>" + msg.userName.toHtmlEscaped() + ":</span>"\
 					"<span class='time'>" + time.time().toString(Qt::SystemLocaleShortDate) + "</span>"\
 					"<span class='message'>" + messageText + "</span></p>";
 				html.append(htmlMsg);
@@ -429,6 +429,8 @@ void lmcMessageLog::onAnchorClicked(const QUrl &url)
     }
 
     QStringList linkData = linkPath.split("/", QString::SkipEmptyParts);
+	if(linkData.size() < 4)
+		return;
     FileMode mode;
     FileOp op;
 
@@ -580,7 +582,7 @@ void lmcMessageLog::appendBroadcast(QString* lpszUserId, QString* lpszUserName, 
 	QString html = themeData.pubMsg;
 	QString caption = tr("Broadcast message from %1:");
     html.replace("%iconpath%", "qrc" IDR_BROADCASTMSG);
-	html.replace("%sender%", caption.arg(*lpszUserName));
+	html.replace("%sender%", caption.arg(lpszUserName->toHtmlEscaped()));
 	html.replace("%time%", getTimeString(pTime));
 	html.replace("%style%", "");
 	html.replace("%message%", *lpszMessage);
@@ -606,7 +608,7 @@ void lmcMessageLog::appendMessage(QString* lpszUserId, QString* lpszUserName, QS
         QString iconPath = QFile::exists(filePath) ? QUrl::fromLocalFile(filePath).toString() : "qrc" AVT_DEFAULT;
 
 		html.replace("%iconpath%", iconPath);
-		html.replace("%sender%", *lpszUserName);
+		html.replace("%sender%", lpszUserName->toHtmlEscaped());
 		html.replace("%time%", getTimeString(pTime));
 		html.replace("%style%", fontStyle);
 		html.replace("%message%", *lpszMessage);
@@ -643,7 +645,7 @@ void lmcMessageLog::appendPublicMessage(QString* lpszUserId, QString* lpszUserNa
         QString iconPath = QFile::exists(filePath) ? QUrl::fromLocalFile(filePath).toString() : "qrc" AVT_DEFAULT;
 
 		html.replace("%iconpath%", iconPath);
-		html.replace("%sender%", *lpszUserName);
+		html.replace("%sender%", lpszUserName->toHtmlEscaped());
 		html.replace("%time%", getTimeString(pTime));
 		html.replace("%style%", fontStyle);
 		html.replace("%message%", *lpszMessage);
@@ -689,7 +691,8 @@ QString lmcMessageLog::getFileMessageText(MessageType type, QString* lpszUserNam
 
     if(fileMode == FM_Send) {
 		caption = tr("Sending '%1' to %2.");
-        html.replace("%sender%", caption.arg(pMessage->data(XN_FILENAME), *lpszUserName));
+	        html.replace("%sender%", caption.arg(pMessage->data(XN_FILENAME).toHtmlEscaped(),
+	            lpszUserName->toHtmlEscaped()));
         html.replace("%message%", "");
 
 		switch(fileOp) {
@@ -715,8 +718,8 @@ QString lmcMessageLog::getFileMessageText(MessageType type, QString* lpszUserNam
                 caption = tr("%1 is sending you a file:");
             else
                 caption = tr("%1 is sending you a folder:");
-            html.replace("%sender%", caption.arg(*lpszUserName));
-            html.replace("%message%", pMessage->data(XN_FILENAME) + " (" +
+	            html.replace("%sender%", caption.arg(lpszUserName->toHtmlEscaped()));
+	            html.replace("%message%", pMessage->data(XN_FILENAME).toHtmlEscaped() + " (" +
 				Helper::formatSize(pMessage->data(XN_FILESIZE).toLongLong()) + ")");
             html.replace("%fileid%", "");
 		} else {
@@ -724,8 +727,8 @@ QString lmcMessageLog::getFileMessageText(MessageType type, QString* lpszUserNam
                 caption = tr("%1 sends you a file:");
             else
                 caption = tr("%1 sends you a folder:");
-            html.replace("%sender%", caption.arg(*lpszUserName));
-            html.replace("%message%", pMessage->data(XN_FILENAME) + " (" +
+	            html.replace("%sender%", caption.arg(lpszUserName->toHtmlEscaped()));
+	            html.replace("%message%", pMessage->data(XN_FILENAME).toHtmlEscaped() + " (" +
 				Helper::formatSize(pMessage->data(XN_FILESIZE).toLongLong()) + ")");
 		}
 
@@ -855,6 +858,8 @@ void lmcMessageLog::fileOperation(QString fileId, QString action, QString fileTy
         return;
 
     if(action.compare(acceptOp) == 0) {
+		if(!receiveFileMap.contains(fileId))
+			return;
         fileData = receiveFileMap.value(fileId);
 		xmlMessage.addData(XN_MODE, FileModeNames[FM_Receive]);
 		xmlMessage.addData(XN_FILETYPE, FileTypeNames[FT_Normal]);
@@ -865,6 +870,8 @@ void lmcMessageLog::fileOperation(QString fileId, QString action, QString fileTy
 		xmlMessage.addData(XN_FILESIZE, fileData.data(XN_FILESIZE));
 	}
     else if(action.compare(declineOp) == 0) {
+		if(!receiveFileMap.contains(fileId))
+			return;
         fileData = receiveFileMap.value(fileId);
 		xmlMessage.addData(XN_MODE, FileModeNames[FM_Receive]);
 		xmlMessage.addData(XN_FILETYPE, FileTypeNames[FT_Normal]);
@@ -872,6 +879,9 @@ void lmcMessageLog::fileOperation(QString fileId, QString action, QString fileTy
         xmlMessage.addData(XN_FILEID, fileData.data(XN_FILEID));
 	}
     else if(action.compare(cancelOp) == 0) {
+		if((mode == FM_Receive && !receiveFileMap.contains(fileId)) ||
+			(mode == FM_Send && !sendFileMap.contains(fileId)))
+			return;
         if(mode == FM_Receive)
             fileData = receiveFileMap.value(fileId);
         else
@@ -892,6 +902,10 @@ void lmcMessageLog::fileOperation(QString fileId, QString action, QString fileTy
 void lmcMessageLog::decodeMessage(QString* lpszMessage, bool useDefaults) {
 	if(!useDefaults && trimMessage)
 		*lpszMessage = lpszMessage->trimmed();
+
+	// This marker is reserved for links generated below. Do not let message
+	// text impersonate one and bypass HTML escaping.
+	lpszMessage->replace("<a data-isLink='true'", "<a data-isLink-user='true'");
 
 	//	The url detection regexps only work with plain text, so link detection is done before
 	//	making the text html safe. The converted links are given a "data-isLink" custom
@@ -917,7 +931,14 @@ void lmcMessageLog::decodeMessage(QString* lpszMessage, bool useDefaults) {
 			QString messageSegment = lpszMessage->mid(index, aStart - index);
 			processMessageText(&messageSegment, useDefaults);
 			message.append(messageSegment);
-			index = lpszMessage->indexOf("</a>", aStart) + 4;
+			int aEnd = lpszMessage->indexOf("</a>", aStart);
+			if(aEnd < 0) {
+				QString remaining = lpszMessage->mid(aStart);
+				processMessageText(&remaining, useDefaults);
+				message.append(remaining);
+				break;
+			}
+			index = aEnd + 4;
 			QString linkSegment = lpszMessage->mid(aStart, index - aStart);
 			message.append(linkSegment);
 		} else {

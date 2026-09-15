@@ -49,6 +49,16 @@ void lmcTcpNetwork::start(void) {
 
 void lmcTcpNetwork::stop(void) {
 	server->close();
+	while(!sendList.isEmpty()) {
+		FileSender* sender = sendList.takeFirst();
+		sender->stop();
+		sender->deleteLater();
+	}
+	while(!receiveList.isEmpty()) {
+		FileReceiver* receiver = receiveList.takeFirst();
+		receiver->stop();
+		receiver->deleteLater();
+	}
 	// Close all open sockets
 	if(locMsgStream)
 		locMsgStream->stop();
@@ -195,18 +205,72 @@ void lmcTcpNetwork::server_newConnection(void) {
 
 void lmcTcpNetwork::socket_readyRead(void) {
 	QTcpSocket* socket = (QTcpSocket*)sender();
-	disconnect(socket, SIGNAL(readyRead()), this, SLOT(socket_readyRead()));
+	if(socket->bytesAvailable() < 3)
+		return;
 
-	QByteArray buffer = socket->read(64);
+	QByteArray buffer = socket->peek(64);
 	if(buffer.startsWith("MSG")) {
-		//	read user id from socket and assign socket to correct message stream
-		QString userId(buffer.mid(3)); // 3 is length of "MSG"
-		addMsgSocket(&userId, socket);
+		// The original code consumed whichever part of the variable-length user
+		// id happened to arrive with the first TCP packet. Match a complete id
+		// already known from discovery before handing the socket over.
+		QString matchedUserId;
+		QStringList candidateIds = messageMap.keys();
+		if(!candidateIds.contains(localId))
+			candidateIds.append(localId);
+		for(int index = 0; index < candidateIds.count(); index++) {
+			QByteArray expectedHeader("MSG");
+			expectedHeader.append(candidateIds[index].toLocal8Bit());
+			if(socket->bytesAvailable() >= expectedHeader.size() &&
+				socket->peek(expectedHeader.size()) == expectedHeader) {
+				matchedUserId = candidateIds[index];
+				socket->read(expectedHeader.size());
+				break;
+			}
+		}
+		if(matchedUserId.isEmpty()) {
+			if(socket->bytesAvailable() > 1024)
+				socket->disconnectFromHost();
+			return;
+		}
+		disconnect(socket, SIGNAL(readyRead()), this, SLOT(socket_readyRead()));
+		addMsgSocket(&matchedUserId, socket);
 	} else if(buffer.startsWith("FILE")) {
-		//	read transfer id from socket and assign socket to correct file receiver
-        QString id(buffer.mid(4, 32)); // 4 is length of "FILE", 32 is length of File Id
-        QString userId(buffer.mid(36));
-        addFileSocket(&id, &userId, socket);
+		if(socket->bytesAvailable() < 36)
+			return;
+
+		QString id(socket->peek(36).mid(4, 32)); // 4 is "FILE", followed by a 32-byte UUID
+		FileReceiver* receiver = NULL;
+		for(int index = 0; index < receiveList.count(); index++) {
+			if(receiveList[index]->id == id) {
+				// Transfer ids are UUIDs and must identify exactly one pending receiver.
+				if(receiver) {
+					socket->disconnectFromHost();
+					return;
+				}
+				receiver = receiveList[index];
+			}
+		}
+		if(!receiver) {
+			socket->disconnectFromHost();
+			return;
+		}
+
+		QByteArray expectedHeader("FILE");
+		expectedHeader.append(id.toLocal8Bit());
+		expectedHeader.append(receiver->peerId.toLocal8Bit());
+		if(socket->bytesAvailable() < expectedHeader.size())
+			return;
+		if(socket->read(expectedHeader.size()) != expectedHeader) {
+			socket->disconnectFromHost();
+			return;
+		}
+
+		disconnect(socket, SIGNAL(readyRead()), this, SLOT(socket_readyRead()));
+		QString userId = receiver->peerId;
+		addFileSocket(&id, &userId, socket);
+	} else if(socket->bytesAvailable() >= 4) {
+		disconnect(socket, SIGNAL(readyRead()), this, SLOT(socket_readyRead()));
+		socket->disconnectFromHost();
 	}
 }
 
@@ -264,8 +328,10 @@ void lmcTcpNetwork::receiveMessage(QString* lpszUserId, QString* lpszAddress, QB
 		break;
 	case DT_Handshake:
 		// decrypt aes key and iv with private key
-		crypto->retreiveAES(&pHeader->userId, cipherData);
-		emit newConnection(&pHeader->userId, &pHeader->address);
+		if(crypto->retreiveAES(&pHeader->userId, cipherData))
+			emit newConnection(&pHeader->userId, &pHeader->address);
+		else
+			lmcTrace::write("Warning: Invalid encryption handshake received");
 		break;
 	case DT_Message:
 		// decrypt message with aes
@@ -280,6 +346,7 @@ void lmcTcpNetwork::receiveMessage(QString* lpszUserId, QString* lpszAddress, QB
     default:
         break;
 	}
+	delete pHeader;
 }
 
 void lmcTcpNetwork::addFileSocket(QString* lpszId, QString* lpszUserId, QTcpSocket* pSocket) {
@@ -350,12 +417,16 @@ FileReceiver* lmcTcpNetwork::getReceiver(QString id, QString userId) {
 
 void lmcTcpNetwork::removeSender(FileSender* pSender) {
     int index = sendList.indexOf(pSender);
+	if(index < 0)
+		return;
     FileSender* sender = sendList.takeAt(index);
     sender->deleteLater();  // deleting later is generally safer
 }
 
 void lmcTcpNetwork::removeReceiver(FileReceiver* pReceiver) {
     int index = receiveList.indexOf(pReceiver);
+	if(index < 0)
+		return;
     FileReceiver* receiver = receiveList.takeAt(index);
     receiver->deleteLater();  // deleting later is generally safer
 }

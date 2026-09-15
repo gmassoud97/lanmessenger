@@ -4,7 +4,8 @@ SetCompressor /SOLID lzma
 !include "MUI2.nsh"
 
 !define ProductName "LAN Messenger"
-!define ProductVersion "1.2.39-searchable-history"
+!define ProductVersion "1.2.39"
+!define ProductRevision "Revision 2026-09-15"
 !define AppExec "lmc.exe"
 !define Uninstaller "uninstall.exe"
 !define UninstKey "Software\Microsoft\Windows\CurrentVersion\Uninstall\LAN Messenger"
@@ -19,6 +20,11 @@ SetCompressor /SOLID lzma
 
 Name "${ProductName}"
 OutFile "${OutputFile}"
+VIProductVersion "1.2.39.0"
+VIAddVersionKey /LANG=1033 "ProductName" "MBC LAN Messenger"
+VIAddVersionKey /LANG=1033 "FileDescription" "MBC LAN Messenger Installer"
+VIAddVersionKey /LANG=1033 "FileVersion" "${ProductVersion} (${ProductRevision})"
+VIAddVersionKey /LANG=1033 "ProductVersion" "${ProductVersion} (${ProductRevision})"
 InstallDir "$PROGRAMFILES64\${ProductName}"
 InstallDirRegKey HKLM "${UninstKey}" "InstallLocation"
 RequestExecutionLevel admin
@@ -42,7 +48,7 @@ Section "Install"
 
   WriteUninstaller "$INSTDIR\${Uninstaller}"
   WriteRegStr HKLM "${UninstKey}" "DisplayName" "${ProductName}"
-  WriteRegStr HKLM "${UninstKey}" "DisplayVersion" "${ProductVersion}"
+  WriteRegStr HKLM "${UninstKey}" "DisplayVersion" "${ProductVersion} - ${ProductRevision}"
   WriteRegStr HKLM "${UninstKey}" "DisplayIcon" "$INSTDIR\${AppExec},0"
   WriteRegStr HKLM "${UninstKey}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKLM "${UninstKey}" "UninstallString" '$"$INSTDIR\${Uninstaller}$"'

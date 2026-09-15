@@ -51,6 +51,9 @@ struct DBHeader {
 		this->marker = HC_DBMARKER;
 		this->headerSize = HC_HDRSIZE;
 		this->version = HC_VERSION;
+		this->count = 0;
+		this->first = 0;
+		this->last = 0;
 	}
 
 	DBHeader(QString szMarker, qint16 nHeaderSize, int nVersion, int nCount, qint64 nFirst, qint64 nLast) {

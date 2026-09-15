@@ -220,7 +220,8 @@ void lmcChatRoomWindow::addUser(User* pUser) {
 
 	//	Local user cannot participate in public chat if status is offline
 	if(!groupMode && pUser->id.compare(localId) == 0) {
-		bool offline = (statusType[Helper::statusIndexFromCode(pUser->status)] == StatusTypeOffline);
+		int statusIndex = Helper::statusIndexFromCode(pUser->status);
+		bool offline = (statusIndex >= 0 && statusType[statusIndex] == StatusTypeOffline);
 		ui.txtMessage->setEnabled(!offline);
 		ui.txtMessage->setFocus();
 	}
@@ -245,7 +246,8 @@ void lmcChatRoomWindow::updateUser(User* pUser) {
 
 	//	Local user cannot participate in public chat if status is offline
 	if(!groupMode && pUser->id.compare(localId) == 0) {
-		bool offline = (statusType[Helper::statusIndexFromCode(pUser->status)] == StatusTypeOffline);
+		int statusIndex = Helper::statusIndexFromCode(pUser->status);
+		bool offline = (statusIndex >= 0 && statusType[statusIndex] == StatusTypeOffline);
 		ui.txtMessage->setEnabled(!offline);
 		ui.txtMessage->setFocus();
 	}
