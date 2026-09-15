@@ -68,6 +68,7 @@ private slots:
 	void receiveMessage(QString* lpszUserId, QString* lpszAddress, QByteArray& data);
 
 private:
+	void processIncomingSocket(QTcpSocket* socket);
     void addFileSocket(QString* lpszId, QString *lpszUserId, QTcpSocket *pSocket);
 	void addMsgSocket(QString* lpszUserId, QTcpSocket* pSocket);
 	void sendPublicKey(QString* lpszUserId);

@@ -100,6 +100,14 @@ void lmcTcpNetwork::addConnection(QString* lpszUserId, QString* lpszAddress) {
 	else
 		messageMap.insert(*lpszUserId, msgStream);
 	msgStream->init();
+
+	// An incoming stream can reach us just before its UDP announcement. In
+	// that case socket_readyRead() deliberately leaves its header buffered
+	// until the peer id is known. Recheck pending sockets now instead of
+	// waiting for a later refresh broadcast to make the contact appear.
+	QList<QTcpSocket*> pendingSockets = server->findChildren<QTcpSocket*>();
+	for(int index = 0; index < pendingSockets.count(); index++)
+		processIncomingSocket(pendingSockets[index]);
 }
 
 void lmcTcpNetwork::sendMessage(QString* lpszReceiverId, QString* lpszData) {
@@ -205,6 +213,12 @@ void lmcTcpNetwork::server_newConnection(void) {
 
 void lmcTcpNetwork::socket_readyRead(void) {
 	QTcpSocket* socket = (QTcpSocket*)sender();
+	processIncomingSocket(socket);
+}
+
+void lmcTcpNetwork::processIncomingSocket(QTcpSocket* socket) {
+	if(!socket || socket->property("lmcHeaderAccepted").toBool())
+		return;
 	if(socket->bytesAvailable() < 3)
 		return;
 
@@ -233,6 +247,7 @@ void lmcTcpNetwork::socket_readyRead(void) {
 			return;
 		}
 		disconnect(socket, SIGNAL(readyRead()), this, SLOT(socket_readyRead()));
+		socket->setProperty("lmcHeaderAccepted", true);
 		addMsgSocket(&matchedUserId, socket);
 	} else if(buffer.startsWith("FILE")) {
 		if(socket->bytesAvailable() < 36)
@@ -266,6 +281,7 @@ void lmcTcpNetwork::socket_readyRead(void) {
 		}
 
 		disconnect(socket, SIGNAL(readyRead()), this, SLOT(socket_readyRead()));
+		socket->setProperty("lmcHeaderAccepted", true);
 		QString userId = receiver->peerId;
 		addFileSocket(&id, &userId, socket);
 	} else if(socket->bytesAvailable() >= 4) {
