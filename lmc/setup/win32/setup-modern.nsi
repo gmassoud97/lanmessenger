@@ -32,7 +32,11 @@ ShowInstDetails show
 ShowUninstDetails show
 
 !define MUI_ABORTWARNING
-!define MUI_FINISHPAGE_RUN "$INSTDIR\${AppExec}"
+; Do not launch LAN Messenger from the elevated installer. A process started
+; directly by this admin installer inherits elevation, and Windows UIPI then
+; blocks drag-and-drop from a normal Explorer window into the app. Starting
+; LAN Messenger later from the desktop/Start Menu shortcut runs it normally
+; and restores Explorer file/folder drag-and-drop.
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
