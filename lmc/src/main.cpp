@@ -82,7 +82,11 @@ int main(int argc, char *argv[]) {
 	QString messageList;
 	QStringList arguments = QApplication::arguments();
 
-	for(int index = 0; index < arguments.count(); index++) {
+	// Skip argv[0] (the executable path). When an already-running copy is
+	// launched from the pinned taskbar icon, an empty message tells that copy
+	// to restore its hidden main window. Sending argv[0] made it look like an
+	// unknown command, so the existing window stayed hidden.
+	for(int index = 1; index < arguments.count(); index++) {
 		if(arguments.at(index).compare("/?", Qt::CaseInsensitive) == 0)
 			return showSwitches();
 		else if(arguments.at(index).compare("/inst", Qt::CaseInsensitive) == 0)

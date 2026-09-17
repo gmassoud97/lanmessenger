@@ -15,6 +15,7 @@
 
 #include <QDesktopWidget>
 #include <QFileDialog>
+#include <QHeaderView>
 #include <QMessageBox>
 #include <QSaveFile>
 #include <QTextDocument>
@@ -23,6 +24,8 @@
 
 lmcHistoryWindow::lmcHistoryWindow(QWidget *parent, Qt::WindowFlags flags) : QWidget(parent, flags) {
 	ui.setupUi(this);
+	ui.tvMsgList->header()->setSortIndicatorShown(true);
+	ui.tvMsgList->header()->setSortIndicator(1, Qt::DescendingOrder);
 
 	setAttribute(Qt::WA_DeleteOnClose, true);
 
@@ -215,6 +218,9 @@ void lmcHistoryWindow::displayList(void) {
 }
 
 void lmcHistoryWindow::populateList(const QString& searchText) {
+	const int sortColumn = ui.tvMsgList->header()->sortIndicatorSection();
+	const Qt::SortOrder sortOrder = ui.tvMsgList->header()->sortIndicatorOrder();
+	ui.tvMsgList->setSortingEnabled(false);
 	ui.tvMsgList->clear();
 
 	for(int index = 0; index < msgList.count(); index++) {
@@ -233,7 +239,9 @@ void lmcHistoryWindow::populateList(const QString& searchText) {
 		ui.tvMsgList->addTopLevelItem(pItem);
 	}
 
-	ui.tvMsgList->sortByColumn(1, Qt::DescendingOrder);
+	ui.tvMsgList->setSortingEnabled(true);
+	ui.tvMsgList->sortByColumn(sortColumn, sortOrder);
+	ui.tvMsgList->header()->setSortIndicator(sortColumn, sortOrder);
 
 	if(ui.tvMsgList->topLevelItemCount() > 0)
 		ui.tvMsgList->setCurrentItem(ui.tvMsgList->topLevelItem(0));
