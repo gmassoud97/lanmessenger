@@ -27,9 +27,12 @@
 
 #include "uidefinitions.h"
 
-const int HTMLESC_COUNT = 5;
-const QString htmlSymbol[] = {"&", "\"", "<", ">", " "};
-const QString htmlEscape[] = {"&amp;", "&quot;", "&lt;", "&gt;", "&nbsp;"};
+// Keep normal spaces as U+0020. Some CJK fonts give the non-breaking-space
+// glyph little or no advance, which makes correctly spaced messages appear
+// as if their words were joined together.
+const int HTMLESC_COUNT = 4;
+const QString htmlSymbol[] = {"&", "\"", "<", ">"};
+const QString htmlEscape[] = {"&amp;", "&quot;", "&lt;", "&gt;"};
 
 enum InfoType {
 	IT_Ok			= 0x00,
