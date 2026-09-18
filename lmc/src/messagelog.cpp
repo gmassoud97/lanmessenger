@@ -266,7 +266,7 @@ QString lmcMessageLog::prepareMessageLogForSave(OutputFormat format) {
 				decodeMessage(&messageText, true);
 				QString htmlMsg =
 					"<p><span class='salutation'>" + msg.userName.toHtmlEscaped() + ":</span>"\
-					"<span class='time'>" + time.time().toString(Qt::SystemLocaleShortDate) + "</span>"\
+					"<span class='time'>" + time.time().toString(Qt::SystemLocaleShortDate) + "</span> "\
 					"<span class='message'>" + messageText + "</span></p>";
 				html.append(htmlMsg);
 			} else if(msg.type == MT_File || msg.type == MT_Folder) {
@@ -283,7 +283,7 @@ QString lmcMessageLog::prepareMessageLogForSave(OutputFormat format) {
 				QString htmlMsg =
 					"<p><span class='salutation'>" + direction + " " + objectType +
 					" - " + peerName + ":</span>" +
-					"<span class='time'>" + time.toString(Qt::SystemLocaleShortDate) + "</span>" +
+					"<span class='time'>" + time.toString(Qt::SystemLocaleShortDate) + "</span> " +
 					"<span class='message'>" + fileName + " [" + status.toHtmlEscaped() + "]</span></p>";
 				html.append(htmlMsg);
 			}

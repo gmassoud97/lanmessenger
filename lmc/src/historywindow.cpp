@@ -120,6 +120,10 @@ void lmcHistoryWindow::tvMsgList_currentItemChanged(QTreeWidgetItem* current, QT
 	if(current) {
 		qint64 offset = current->data(0, DataRole).toLongLong();
 		QString data = History::getMessage(offset);
+		// Keep an ordinary horizontal space between the timestamp and message.
+		// This also repairs older saved history when it is displayed.
+		data.replace("</span><span class='message'>", "</span> <span class='message'>");
+		data.replace("</span><span class=\"message\">", "</span> <span class=\"message\">");
 
 		pMessageLog->setHtml(data);
 		highlightSearchText();
