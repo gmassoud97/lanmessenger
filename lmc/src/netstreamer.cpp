@@ -29,12 +29,18 @@
 #include "netstreamer.h"
 
 const qint64 bufferSize = 65535;
+const quint32 maxMessageSize = 64 * 1024 * 1024;
 
 /****************************************************************************
 ** Class: FileSender
 ** Description: Handles sending files.
 ****************************************************************************/
 FileSender::FileSender(void) {
+	file = NULL;
+	socket = NULL;
+	timer = NULL;
+	buffer = NULL;
+	active = false;
 }
 
 FileSender::FileSender(QString szId, QString szLocalId, QString szPeerId, QString szFilePath,
@@ -54,10 +60,13 @@ FileSender::FileSender(QString szId, QString szLocalId, QString szPeerId, QStrin
 		file = NULL;
 		socket = NULL;
 		timer = NULL;
+		buffer = NULL;
 		type = nType;
 }
 
 FileSender::~FileSender(void) {
+	delete[] buffer;
+	delete file;
 }
 
 void FileSender::init(void) {
@@ -88,7 +97,11 @@ void FileSender::connected(void) {
 	data.insert(0, "FILE");	// insert indicator that this socket handles file transfer
 	//	send an id message and then wait for a START message 
 	//	from receiver, which will trigger readyRead signal
-	socket->write(data);
+	if(socket->write(data) != data.size()) {
+		QString error;
+		emit progressUpdated(FM_Send, FO_Error, type, &id, &peerId, &error);
+		stop();
+	}
 }
 
 void FileSender::disconnected(void) {
@@ -99,7 +112,17 @@ void FileSender::disconnected(void) {
 }
 
 void FileSender::readyRead(void) {
-	//	message received from receiver, start sending the file
+	if(socket->bytesAvailable() < 5)
+		return;
+	QByteArray command = socket->read(5);
+	if(command != "START") {
+		QString data;
+		emit progressUpdated(FM_Send, FO_Error, type, &id, &peerId, &data);
+		stop();
+		return;
+	}
+	disconnect(socket, SIGNAL(readyRead()), this, SLOT(readyRead()));
+	// Valid start command received from the receiver; begin sending the file.
 	sendFile();
 }
 
@@ -116,20 +139,31 @@ void FileSender::bytesWritten(qint64 bytes) {
 
 	if(!active)
 		return;
+	// Do not advance the source file while data from the previous block is
+	// still queued. Closing as soon as QFile::pos() reached fileSize could
+	// otherwise discard bytes that QTcpSocket had not flushed yet.
+	if(socket->bytesToWrite() > 0)
+		return;
 
 	qint64 unsentBytes = fileSize - file->pos();
 
-	if(unsentBytes == 0) {
+	if(unsentBytes <= 0) {
 		active = false;
+		if(timer)
+			timer->stop();
 		file->close();
-		socket->close();
+		socket->disconnectFromHost();
         emit progressUpdated(FM_Send, FO_Complete, type, &id, &peerId, &filePath);
 		return;
 	}
 
 	qint64 bytesToSend = (bufferSize < unsentBytes) ? bufferSize : unsentBytes;
 	qint64 bytesRead = file->read(buffer, bytesToSend);
-	socket->write(buffer, bytesRead);
+	if(bytesRead <= 0 || socket->write(buffer, bytesRead) != bytesRead) {
+		QString data;
+		emit progressUpdated(FM_Send, FO_Error, type, &id, &peerId, &data);
+		stop();
+	}
 
 //	if(file->pos() > milestone) {
 //		QString transferred = QString::number(file->pos());
@@ -142,8 +176,28 @@ void FileSender::sendFile(void) {
 	file = new QFile(filePath);
 
 	if(file->open(QIODevice::ReadOnly)) {
-		buffer = new char[bufferSize];
 		active = true;
+
+		// The advertised size is part of the transfer protocol. If the source
+		// changed while waiting for acceptance, fail instead of hanging or
+		// silently sending a truncated file.
+		if(fileSize < 0 || file->size() != fileSize) {
+			QString data;
+			emit progressUpdated(FM_Send, FO_Error, type, &id, &peerId, &data);
+			stop();
+			return;
+		}
+
+		// A zero-byte write emits no bytesWritten signal, so complete it here.
+		if(fileSize == 0) {
+			active = false;
+			file->close();
+			socket->disconnectFromHost();
+			emit progressUpdated(FM_Send, FO_Complete, type, &id, &peerId, &filePath);
+			return;
+		}
+
+		buffer = new char[bufferSize];
 
 		timer = new QTimer(this);
 		connect(timer, SIGNAL(timeout()), this, SLOT(timer_timeout()));
@@ -152,7 +206,11 @@ void FileSender::sendFile(void) {
 		qint64 unsentBytes = fileSize - file->pos();
 		qint64 bytesToSend = (bufferSize < unsentBytes) ? bufferSize : unsentBytes;
 		qint64 bytesRead = file->read(buffer, bytesToSend);
-		socket->write(buffer, bytesRead);
+		if(bytesRead <= 0 || socket->write(buffer, bytesRead) != bytesRead) {
+			QString data;
+			emit progressUpdated(FM_Send, FO_Error, type, &id, &peerId, &data);
+			stop();
+		}
 	} else {
 		socket->close();
         QString data;
@@ -166,6 +224,11 @@ void FileSender::sendFile(void) {
 ** Description: Handles receiving files.
 ****************************************************************************/
 FileReceiver::FileReceiver(void) {
+	file = NULL;
+	socket = NULL;
+	timer = NULL;
+	buffer = NULL;
+	active = false;
 }
 
 FileReceiver::FileReceiver(QString szId, QString szPeerId, QString szFilePath, QString szFileName, 
@@ -184,22 +247,44 @@ FileReceiver::FileReceiver(QString szId, QString szPeerId, QString szFilePath, Q
 		file = NULL;
 		socket = NULL;
 		timer = NULL;
+		buffer = NULL;
 		type = nType;
         lastPosition = 0;
         numTimeOuts = 0;
 }
 
 FileReceiver::~FileReceiver(void) {
+	delete[] buffer;
+	delete file;
 }
 
 void FileReceiver::init(QTcpSocket* socket) {
 	this->socket = socket;
 	connect(socket, SIGNAL(disconnected()), this, SLOT(disconnected()));
+	connect(socket, SIGNAL(disconnected()), socket, SLOT(deleteLater()));
 	connect(this->socket, SIGNAL(readyRead()), this, SLOT(readyRead()));
 
 	receiveFile();
+	if(!active)
+		return;
 	//	now send a START message to sender
-	socket->write("START");
+	if(socket->write("START") != 5) {
+		QString data;
+		emit progressUpdated(FM_Receive, FO_Error, type, &id, &peerId, &data);
+		stop();
+		return;
+	}
+
+	// No readyRead signal occurs for an empty payload. Both peers can finish
+	// immediately after the START handshake has been queued.
+	if(fileSize == 0) {
+		socket->flush();
+		active = false;
+		if(timer)
+			timer->stop();
+		file->close();
+		emit progressUpdated(FM_Receive, FO_Complete, type, &id, &peerId, &filePath);
+	}
 }
 
 void FileReceiver::stop(void) {
@@ -228,19 +313,28 @@ void FileReceiver::disconnected(void) {
 }
 
 void FileReceiver::readyRead(void) {
-	if(!active)
-		return;
+	while(active && socket->bytesAvailable() > 0) {
+		qint64 unreceivedBytes = fileSize - file->pos();
+		qint64 bytesToRead = (bufferSize < unreceivedBytes) ? bufferSize : unreceivedBytes;
+		qint64 bytesReceived = socket->read(buffer, bytesToRead);
+		if(bytesReceived <= 0)
+			return;
+		if(file->write(buffer, bytesReceived) != bytesReceived) {
+			QString data;
+			emit progressUpdated(FM_Receive, FO_Error, type, &id, &peerId, &data);
+			stop();
+			return;
+		}
 
-	qint64 bytesReceived = socket->read(buffer, bufferSize);
-	file->write(buffer, bytesReceived);
-
-	qint64 unreceivedBytes = fileSize - file->pos();
-	if(unreceivedBytes == 0) {
-		active = false;
-		file->close();
-		socket->close();
-		emit progressUpdated(FM_Receive, FO_Complete, type, &id, &peerId, &filePath);
-		return;
+		if(fileSize - file->pos() <= 0) {
+			active = false;
+			if(timer)
+				timer->stop();
+			file->close();
+			socket->disconnectFromHost();
+			emit progressUpdated(FM_Receive, FO_Complete, type, &id, &peerId, &filePath);
+			return;
+		}
 	}
 
 //	if(file->pos() > milestone) {
@@ -278,8 +372,9 @@ void FileReceiver::receiveFile(void) {
 
 	file = new QFile(filePath);
 
-	if(file->open(QIODevice::WriteOnly)) {
-		buffer = new char[bufferSize];
+	if(fileSize >= 0 && file->open(QIODevice::WriteOnly)) {
+		if(fileSize > 0)
+			buffer = new char[bufferSize];
 		active = true;
 
 		timer = new QTimer(this);
@@ -299,6 +394,8 @@ void FileReceiver::receiveFile(void) {
 MsgStream::MsgStream(void) {
 	socket = NULL;
 	reading = false;
+	outDataLen = 0;
+	inDataLen = 0;
 }
 
 MsgStream::MsgStream(QString szLocalId, QString szPeerId, QString szPeerAddress, int nPort) {
@@ -339,6 +436,10 @@ void MsgStream::stop(void) {
 }
 
 void MsgStream::sendMessage(QByteArray& data) {
+	if((quint64)data.length() > maxMessageSize) {
+		lmcTrace::write("Error: Message is too large to send");
+		return;
+	}
 	qint32 dataLen = sizeof(quint32) + data.length();
 	outDataLen += dataLen;
 	outData.resize(dataLen);
@@ -369,31 +470,32 @@ void MsgStream::disconnected(void) {
 }
 
 void MsgStream::readyRead(void) {
-	qint64 available = socket->bytesAvailable();
-	while(available > 0) {
+	while(socket->bytesAvailable() > 0) {
 		if(!reading) {
+			if(socket->bytesAvailable() < (qint64)sizeof(quint32))
+				return;
 			reading = true;
 			QByteArray len = socket->read(4);
 			QDataStream stream(len);
 			stream >> inDataLen;
+			if(stream.status() != QDataStream::Ok || inDataLen == 0 || inDataLen > maxMessageSize) {
+				lmcTrace::write("Warning: Invalid TCP message length");
+				reading = false;
+				socket->disconnectFromHost();
+				return;
+			}
 			inData.clear();
-			QByteArray data = socket->read(inDataLen);
-			inData.append(data);
-			inDataLen -= data.length();
-			available -= (sizeof(quint32) +  data.length());
-			if(inDataLen == 0) {
-				reading = false;
-				emit messageReceived(&peerId, &peerAddress, inData);
-			}
-		} else {
-			QByteArray data = socket->read(inDataLen);
-			inData.append(data);
-			inDataLen -= data.length();
-			available -= data.length();
-			if(inDataLen == 0) {
-				reading = false;
-				emit messageReceived(&peerId, &peerAddress, inData);
-			}
+		}
+
+		qint64 bytesToRead = qMin((qint64)inDataLen, socket->bytesAvailable());
+		if(bytesToRead <= 0)
+			return;
+		QByteArray data = socket->read(bytesToRead);
+		inData.append(data);
+		inDataLen -= data.length();
+		if(inDataLen == 0) {
+			reading = false;
+			emit messageReceived(&peerId, &peerAddress, inData);
 		}
 	}
 }

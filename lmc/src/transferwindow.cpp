@@ -110,8 +110,7 @@ void lmcTransferWindow::createTransfer(MessageType type, FileMode mode, QString*
         fileView.state = FileView::TS_Receive;
 	}
 	fileView.startTime = QDateTime::currentDateTime();
-	fileView.fileDisplay = fileView.fileName + " (" + fileView.sizeDisplay + ") - " +
-		fileView.startTime.toString("yyyy-MM-dd HH:mm");
+	fileView.fileDisplay = fileView.fileName + " (" + fileView.sizeDisplay + ")";
 	fileView.icon = getIcon(fileView.filePath);
     ui.lvTransferList->insertItem(0, &fileView);
     ui.lvTransferList->setCurrentRow(0);
@@ -202,7 +201,7 @@ void lmcTransferWindow::receiveMessage(MessageType type, QString* lpszUserId, Xm
 	ui.lvTransferList->itemChanged(itemIndex);
 
 	FileView* current = ui.lvTransferList->currentItem();
-	setButtonState(current->state);
+	setButtonState(current ? current->state : FileView::TS_Max);
 }
 
 void lmcTransferWindow::settingsChanged(void) {
@@ -241,18 +240,26 @@ void lmcTransferWindow::lvTransferList_currentRowChanged(int currentRow) {
 	}
 
 	FileView* pFileView = ui.lvTransferList->item(currentRow);
+	if(!pFileView) {
+		setButtonState(FileView::TS_Max);
+		return;
+	}
 	setButtonState(pFileView->state);
 	pactShowFolder->setEnabled(QFile::exists(pFileView->filePath));
 }
 
 void lmcTransferWindow::lvTransferList_activated(const QModelIndex& index) {
 	FileView* view = ui.lvTransferList->item(index.row());
+	if(!view)
+		return;
 	
 	QDesktopServices::openUrl(QUrl::fromLocalFile(view->filePath));
 }
 
 void lmcTransferWindow::btnCancel_clicked(void) {
 	FileView* view = ui.lvTransferList->currentItem();
+	if(!view)
+		return;
 
 	int mode = view->mode == FileView::TM_Send ? FM_Send : FM_Receive;
 	XmlMessage xmlMessage;
@@ -270,6 +277,8 @@ void lmcTransferWindow::btnCancel_clicked(void) {
 
 void lmcTransferWindow::btnRemove_clicked(void) {
 	FileView* view = ui.lvTransferList->currentItem();
+	if(!view)
+		return;
 
 	if(view->state < FileView::TS_Complete)
 		return;
@@ -284,6 +293,8 @@ void lmcTransferWindow::btnClear_clicked(void) {
 
 void lmcTransferWindow::btnShowFolder_clicked(void) {
 	FileView* view = ui.lvTransferList->currentItem();
+	if(!view)
+		return;
 
 	QString path = QFileInfo(view->filePath).dir().path();
 	QUrl url;

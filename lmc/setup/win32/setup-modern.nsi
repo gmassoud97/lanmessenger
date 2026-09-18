@@ -4,7 +4,8 @@ SetCompressor /SOLID lzma
 !include "MUI2.nsh"
 
 !define ProductName "LAN Messenger"
-!define ProductVersion "1.2.39-searchable-history"
+!define ProductVersion "1.2.39"
+!define ProductRevision "Revision 2026-09-15"
 !define AppExec "lmc.exe"
 !define Uninstaller "uninstall.exe"
 !define UninstKey "Software\Microsoft\Windows\CurrentVersion\Uninstall\LAN Messenger"
@@ -19,6 +20,11 @@ SetCompressor /SOLID lzma
 
 Name "${ProductName}"
 OutFile "${OutputFile}"
+VIProductVersion "1.2.39.0"
+VIAddVersionKey /LANG=1033 "ProductName" "MBC LAN Messenger"
+VIAddVersionKey /LANG=1033 "FileDescription" "MBC LAN Messenger Installer"
+VIAddVersionKey /LANG=1033 "FileVersion" "${ProductVersion} (${ProductRevision})"
+VIAddVersionKey /LANG=1033 "ProductVersion" "${ProductVersion} (${ProductRevision})"
 InstallDir "$PROGRAMFILES64\${ProductName}"
 InstallDirRegKey HKLM "${UninstKey}" "InstallLocation"
 RequestExecutionLevel admin
@@ -26,10 +32,11 @@ ShowInstDetails show
 ShowUninstDetails show
 
 !define MUI_ABORTWARNING
-; Do not launch LAN Messenger from the elevated installer. Windows blocks
-; drag-and-drop from normal Explorer windows into an elevated process (UIPI),
-; which makes file/folder drag-and-drop appear broken on the first run after
-; installation. Launching from the desktop/Start Menu shortcut runs normally.
+; Do not launch LAN Messenger from the elevated installer. A process started
+; directly by this admin installer inherits elevation, and Windows UIPI then
+; blocks drag-and-drop from a normal Explorer window into the app. Starting
+; LAN Messenger later from the desktop/Start Menu shortcut runs it normally
+; and restores Explorer file/folder drag-and-drop.
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
@@ -45,7 +52,7 @@ Section "Install"
 
   WriteUninstaller "$INSTDIR\${Uninstaller}"
   WriteRegStr HKLM "${UninstKey}" "DisplayName" "${ProductName}"
-  WriteRegStr HKLM "${UninstKey}" "DisplayVersion" "${ProductVersion}"
+  WriteRegStr HKLM "${UninstKey}" "DisplayVersion" "${ProductVersion} - ${ProductRevision}"
   WriteRegStr HKLM "${UninstKey}" "DisplayIcon" "$INSTDIR\${AppExec},0"
   WriteRegStr HKLM "${UninstKey}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKLM "${UninstKey}" "UninstallString" '$"$INSTDIR\${Uninstaller}$"'

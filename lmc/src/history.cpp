@@ -5,26 +5,19 @@
 ** Copyright (c) 2010 - 2012 Qualia Digital Solutions.
 ** 
 ** Contact:  qualiatech@gmail.com
-** 
+**
 ** LAN Messenger is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
 ** the Free Software Foundation, either version 3 of the License, or
 ** (at your option) any later version.
 **
-** LAN Messenger is distributed in the hope that it will be useful,
-** but WITHOUT ANY WARRANTY; without even the implied warranty of
-** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-** GNU General Public License for more details.
-**
-** You should have received a copy of the GNU General Public License
-** along with LAN Messenger.  If not, see <http://www.gnu.org/licenses/>.
-**
 ****************************************************************************/
-
 
 #include <QFileInfo>
 #include <QDir>
 #include <QDesktopServices>
+#include <QSaveFile>
+#include <QSet>
 #include "history.h"
 
 QString History::historyFile(void) {
@@ -91,7 +84,11 @@ int History::save(QString user, QDateTime date, QString* lpszData) {
 	QDataStream stream(&file);
 
 	DBHeader header = readHeader(&stream);
-	if(header.marker.compare(HC_DBMARKER) != 0) {
+	if(header.marker.compare(HC_DBMARKER) != 0 || header.version != HC_VERSION ||
+		header.headerSize != HC_HDRSIZE || header.count < 0 ||
+		(header.count == 0 && (header.first != 0 || header.last != 0)) ||
+		(header.count > 0 && (header.first < header.headerSize || header.first >= file.size() ||
+			header.last < header.headerSize || header.last >= file.size()))) {
 		file.close();
 		return -1;
 	}
@@ -139,6 +136,8 @@ qint64 History::insertIndex(QDataStream* pStream, qint64 dataPos, QString user, 
 }
 
 void History::updateIndex(QDataStream* pStream, qint64 oldIndex, qint64 newIndex) {
+	if(oldIndex <= 0)
+		return;
 	pStream->device()->seek(oldIndex);
 
 	*pStream << QString(HC_IDMARKER);
@@ -161,21 +160,32 @@ QList<MsgInfo> History::getList(void) {
 	QDataStream stream(&file);
 
 	DBHeader header = readHeader(&stream);
+	if(stream.status() != QDataStream::Ok || header.marker != HC_DBMARKER ||
+		header.version != HC_VERSION || header.headerSize != HC_HDRSIZE ||
+		header.count < 0 || (header.count == 0 && (header.first != 0 || header.last != 0)))
+		return list;
 	qint64 next = header.first;
+	QSet<qint64> visited;
 	
 	QString marker;
 	qint64 offset;
 	qint64 date;
 	QString name;
 	
-	while(next != 0) {
-		stream.device()->seek(next);
+	while(next != 0 && list.count() < header.count) {
+		if(next < header.headerSize || next >= file.size() || visited.contains(next) ||
+			!stream.device()->seek(next))
+			break;
+		visited.insert(next);
 		MsgInfo info;
 		stream >> marker;
 		stream >> next;
 		stream >> offset;
 		stream >> date;
 		stream >> name;
+		if(stream.status() != QDataStream::Ok || marker != HC_IDMARKER ||
+			offset < header.headerSize || offset >= file.size())
+			break;
 		list.append(MsgInfo(name, QDateTime::fromMSecsSinceEpoch(date), offset));
 	}
 
@@ -197,17 +207,86 @@ QString History::getMessage(qint64 offset) {
 
 	QDataStream stream(&file);
 
+	if(offset < HC_HDRSIZE || offset >= file.size() || !stream.device()->seek(offset))
+		return data;
+
 	QString marker;
-	int length;
+	qint32 length;
+	quint32 encodedLength;
 	QByteArray buffer;
 
-	stream.device()->seek(offset);
 	stream >> marker;
 	stream >> length;
-	stream >> buffer;
+	if(stream.status() != QDataStream::Ok || marker != HC_DTMARKER || length < 0 ||
+		file.size() - file.pos() < (qint64)sizeof(quint32) + length)
+		return data;
+
+	stream >> encodedLength;
+	if(stream.status() != QDataStream::Ok || encodedLength != (quint32)length ||
+		file.size() - file.pos() < length)
+		return data;
+
+	buffer.resize(length);
+	if(length > 0 && stream.readRawData(buffer.data(), length) != length)
+		return QString();
 	
 	data = QString::fromUtf8(buffer, buffer.length());
 
 	file.close();
 	return data;
+}
+
+bool History::remove(qint64 offset) {
+	QList<MsgInfo> records = getList();
+	if(records.isEmpty())
+		return false;
+
+	bool found = false;
+	struct HistoryRecord {
+		QString name;
+		QDateTime date;
+		QString data;
+	};
+	QList<HistoryRecord> keep;
+
+	for(int i = 0; i < records.count(); ++i) {
+		const MsgInfo& info = records.at(i);
+		if(info.offset == offset) {
+			found = true;
+			continue;
+		}
+		HistoryRecord record;
+		record.name = info.name;
+		record.date = info.date;
+		record.data = getMessage(info.offset);
+		keep.append(record);
+	}
+
+	if(!found)
+		return false;
+
+	QString path = historyFile();
+	QSaveFile file(path);
+	if(!file.open(QIODevice::WriteOnly))
+		return false;
+
+	QDataStream stream(&file);
+	DBHeader header(HC_DBMARKER, HC_HDRSIZE, HC_VERSION, 0, 0, 0);
+	writeHeader(&stream, &header);
+
+	qint64 previousIndex = 0;
+	for(int i = 0; i < keep.count(); ++i) {
+		QString data = keep[i].data;
+		qint64 dataPos = insertData(&stream, &data);
+		qint64 newIndex = insertIndex(&stream, dataPos, keep[i].name, keep[i].date);
+		updateIndex(&stream, previousIndex, newIndex);
+		if(header.first == 0)
+			header.first = newIndex;
+		header.last = newIndex;
+		header.count++;
+		previousIndex = newIndex;
+	}
+
+	writeHeader(&stream, &header);
+	return stream.status() == QDataStream::Ok && file.commit();
 }

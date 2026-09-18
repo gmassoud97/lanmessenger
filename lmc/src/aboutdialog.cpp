@@ -70,7 +70,7 @@ void lmcAboutDialog::setUIText(void) {
 	QString title = tr("About %1");
 	setWindowTitle(title.arg(lmcStrings::appName()));
 
-	ui.lblTitle->setText(lmcStrings::appName() + "\n" IDA_VERSION);
+	ui.lblTitle->setText(lmcStrings::appName() + "\n" IDA_VERSION " - " IDA_REVISION);
 	ui.lblLogoSmall->setPixmap(QPixmap(IDR_LOGOSMALL));
 #if defined(QT_NO_DEBUG)
 #define DEBUGINFO " "

@@ -36,8 +36,17 @@ jobs:
           $env:VCPKG_ROOT = $vcpkg
           & (Join-Path $vcpkg 'bootstrap-vcpkg.bat') -disableMetrics
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          & (Join-Path $vcpkg 'vcpkg.exe') install openssl:x64-windows
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          # The archived OpenSSL 1.1 port downloads legacy build tools from
+          # third-party mirrors, which occasionally time out. Retry the same
+          # idempotent install so a transient mirror failure does not abort
+          # the entire Windows build.
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            & (Join-Path $vcpkg 'vcpkg.exe') install openssl:x64-windows
+            if ($LASTEXITCODE -eq 0) { break }
+            if ($attempt -eq 3) { exit $LASTEXITCODE }
+            Write-Warning "OpenSSL install attempt $attempt failed; retrying..."
+            Start-Sleep -Seconds 10
+          }
           "OPENSSL_ROOT_DIR=$vcpkg\installed\x64-windows" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Build LAN Messenger
