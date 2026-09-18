@@ -95,7 +95,11 @@ int main(int argc, char *argv[]) {
 			messageList += arguments.at(index) + "\n";
 	}
 
-	if(application.sendMessage(messageList))
+	// An empty local-socket message can be delivered successfully while
+	// waitForBytesWritten() still reports failure, causing the second process
+	// to continue starting. Use an explicit activation command instead.
+	QString instanceMessage = messageList.isEmpty() ? "/activate\n" : messageList;
+	if(application.sendMessage(instanceMessage))
 		return 0;
 	
 	application.loadTranslations(StdLocation::resLangDir());
