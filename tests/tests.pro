@@ -1,4 +1,4 @@
-QT += core gui network testlib widgets
+QT += core gui network testlib widgets xml
 
 CONFIG += console testcase c++11
 CONFIG -= app_bundle
