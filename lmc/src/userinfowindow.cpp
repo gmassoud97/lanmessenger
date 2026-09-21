@@ -85,7 +85,8 @@ void lmcUserInfoWindow::setUIText(void) {
 		filePath = AVT_DEFAULT;
 	ui.lblAvatar->setPixmap(QPixmap(filePath));
 	ui.lblUserName->setText(userInfo.data(XN_NAME));
-	ui.lblStatus->setText(lmcStrings::statusDesc()[Helper::statusIndexFromCode(userInfo.data(XN_STATUS))]);
+	int statusIndex = Helper::statusIndexFromCode(userInfo.data(XN_STATUS));
+	ui.lblStatus->setText(statusIndex >= 0 ? lmcStrings::statusDesc()[statusIndex] : tr("Unknown"));
 
 	QString data = userInfo.data(XN_FIRSTNAME);
 	if(!data.isNull() && data.compare("N/A") != 0)

@@ -108,6 +108,8 @@ void lmcMessaging::receiveBroadcast(DatagramHeader* pHeader, QString* lpszData) 
 	}
 	pMsgHeader->address = pHeader->address;
 	processBroadcast(pMsgHeader, pMessage);
+	delete pMessage;
+	delete pMsgHeader;
 }
 
 //	A message has been received
@@ -120,6 +122,8 @@ void lmcMessaging::receiveMessage(DatagramHeader* pHeader, QString* lpszData) {
 	}
 	pMsgHeader->address = pHeader->address;
 	processMessage(pMsgHeader, pMessage);
+	delete pMessage;
+	delete pMsgHeader;
 }
 
 //	A web message has been received
@@ -132,6 +136,8 @@ void lmcMessaging::receiveWebMessage(QString *lpszData) {
 	}
 
 	processWebMessage(pMsgHeader, pMessage);
+	delete pMessage;
+	delete pMsgHeader;
 }
 
 //	Handshake procedure has been completed

@@ -353,6 +353,8 @@ bool lmcCore::receiveAppMessage(const QString& szMessage) {
 		if(messageList.contains("/loopback", Qt::CaseInsensitive))
 			pMessaging->setLoopback(true);
 	}
+	if(messageList.contains("/activate", Qt::CaseInsensitive))
+		pMainWindow->restore();
 	if(messageList.contains("/nohistory", Qt::CaseInsensitive)) {
 		QFile::remove(History::historyFile());
 		if(pHistoryWindow)

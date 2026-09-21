@@ -169,9 +169,14 @@ int Helper::compareVersions(const QString& version1, const QString& version2) {
 	QStringList v1 = version1.split(".", QString::SkipEmptyParts);
 	QStringList v2 = version2.split(".", QString::SkipEmptyParts);
 
-	//	Assuming that the version is in x.x.x format, we only need to iterate 3 times
+	// Compare the first three numeric components. Missing or malformed
+	// components are treated as zero instead of indexing past the list.
 	for(int index = 0; index < 3; index++) {
-		int comp = v1[index].toInt() - v2[index].toInt();
+		bool ok1 = false;
+		bool ok2 = false;
+		int part1 = v1.value(index, "0").toInt(&ok1);
+		int part2 = v2.value(index, "0").toInt(&ok2);
+		int comp = (ok1 ? part1 : 0) - (ok2 ? part2 : 0);
 		if(comp != 0)
 			return comp;
 	}

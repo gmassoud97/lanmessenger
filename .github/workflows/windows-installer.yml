@@ -36,8 +36,17 @@ jobs:
           $env:VCPKG_ROOT = $vcpkg
           & (Join-Path $vcpkg 'bootstrap-vcpkg.bat') -disableMetrics
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          & (Join-Path $vcpkg 'vcpkg.exe') install openssl:x64-windows
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          # The archived OpenSSL 1.1 port downloads legacy build tools from
+          # third-party mirrors, which occasionally time out. Retry the same
+          # idempotent install so a transient mirror failure does not abort
+          # the entire Windows build.
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            & (Join-Path $vcpkg 'vcpkg.exe') install openssl:x64-windows
+            if ($LASTEXITCODE -eq 0) { break }
+            if ($attempt -eq 3) { exit $LASTEXITCODE }
+            Write-Warning "OpenSSL install attempt $attempt failed; retrying..."
+            Start-Sleep -Seconds 10
+          }
           "OPENSSL_ROOT_DIR=$vcpkg\installed\x64-windows" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Build LAN Messenger
@@ -64,6 +73,28 @@ jobs:
           nmake
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Pop-Location
+
+      - name: Build and run regression tests
+        shell: pwsh
+        run: |
+          $root = $env:GITHUB_WORKSPACE
+          $testBuild = Join-Path $root 'build\tests'
+          New-Item -ItemType Directory -Force $testBuild | Out-Null
+          Push-Location $testBuild
+          qmake (Join-Path $root 'tests\tests.pro') CONFIG+=release
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          nmake
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          & (Join-Path $testBuild 'release\lmc-regression-tests.exe') -o test-results.txt,txt
+          $testExit = $LASTEXITCODE
+          Get-Content test-results.txt
+          if ($testExit) { exit $testExit }
+          Pop-Location
+
+      - name: Verify source regression contracts
+        shell: pwsh
+        run: ./tests/verify-source-contracts.ps1
 
       - name: Package application
         shell: pwsh
@@ -100,8 +131,6 @@ jobs:
           rcc -binary (Join-Path $source 'resource.qrc') -o (Join-Path $app 'lmc.rcc')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
-          Compress-Archive -Path (Join-Path $app '*') -DestinationPath (Join-Path $root 'LAN-Messenger-Searchable-History-Portable.zip') -Force
-
       - name: Build installer
         shell: pwsh
         run: |
@@ -112,11 +141,16 @@ jobs:
           & $makensis "/DBuildDir=$app" "/DOutputFile=$output" (Join-Path $env:GITHUB_WORKSPACE 'lmc\setup\win32\setup-modern.nsi')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
+      - name: Test Windows packages and installer
+        shell: pwsh
+        run: |
+          ./tests/verify-installer.ps1 `
+            -Installer (Join-Path $env:GITHUB_WORKSPACE 'LAN-Messenger-Searchable-History-Setup.exe')
+
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
           name: LAN-Messenger-Windows
           path: |
             LAN-Messenger-Searchable-History-Setup.exe
-            LAN-Messenger-Searchable-History-Portable.zip
           if-no-files-found: error

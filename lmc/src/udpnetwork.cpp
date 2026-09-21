@@ -174,6 +174,7 @@ void lmcUdpNetwork::parseDatagram(QString* lpszAddress, QByteArray& baDatagram) 
 	DatagramHeader* pHeader = new DatagramHeader(DT_Broadcast, QString(), *lpszAddress);
 	QString szData = QString::fromUtf8(baDatagram.data(), baDatagram.length());
 	emit broadcastReceived(pHeader, &szData);
+	delete pHeader;
 }
 
 void lmcUdpNetwork::setDefaultBroadcast(void) {

@@ -42,16 +42,23 @@ QString Message::addHeader(MessageType type, qint64 id, QString* lpszLocalId, QS
 }
 
 bool Message::getHeader(QString* lpszMessage, MessageHeader** ppHeader, XmlMessage** ppMessage) {
+	*ppHeader = NULL;
 	*ppMessage = new XmlMessage(*lpszMessage);
-	if(!((*ppMessage)->isValid()))
+	if(!((*ppMessage)->isValid())) {
+		delete *ppMessage;
+		*ppMessage = NULL;
 		return false;
+	}
 
 	// add time stamp to message
 	(*ppMessage)->addHeader(XN_TIME, QString::number(QDateTime::currentDateTimeUtc().toMSecsSinceEpoch()));
 
 	int type = Helper::indexOf(MessageTypeNames, MT_Max, (*ppMessage)->header(XN_TYPE));
-	if(type < 0)
+	if(type < 0) {
+		delete *ppMessage;
+		*ppMessage = NULL;
 		return false;
+	}
 
 	*ppHeader = new MessageHeader(
 					(MessageType)type,

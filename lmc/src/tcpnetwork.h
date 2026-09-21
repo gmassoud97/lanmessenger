@@ -63,11 +63,13 @@ signals:
 private slots:
 	void server_newConnection(void);
 	void socket_readyRead(void);
+	void socket_headerTimeout(void);
 	void msgStream_connectionLost(QString* lpszUserId);
 	void update(FileMode mode, FileOp op, FileType type, QString* lpszId, QString* lpszUserId, QString* lpszData);
 	void receiveMessage(QString* lpszUserId, QString* lpszAddress, QByteArray& data);
 
 private:
+	void processIncomingSocket(QTcpSocket* socket);
     void addFileSocket(QString* lpszId, QString *lpszUserId, QTcpSocket *pSocket);
 	void addMsgSocket(QString* lpszUserId, QTcpSocket* pSocket);
 	void sendPublicKey(QString* lpszUserId);
