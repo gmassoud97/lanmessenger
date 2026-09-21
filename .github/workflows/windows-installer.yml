@@ -137,7 +137,7 @@ jobs:
           choco install nsis -y --no-progress
           $makensis = 'C:\Program Files (x86)\NSIS\makensis.exe'
           $app = Join-Path $env:GITHUB_WORKSPACE 'build\app'
-          $output = Join-Path $env:GITHUB_WORKSPACE 'LAN-Messenger-Searchable-History-Setup.exe'
+          $output = Join-Path $env:GITHUB_WORKSPACE 'MBC-LAN-Messenger.exe'
           & $makensis "/DBuildDir=$app" "/DOutputFile=$output" (Join-Path $env:GITHUB_WORKSPACE 'lmc\setup\win32\setup-modern.nsi')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
@@ -145,12 +145,12 @@ jobs:
         shell: pwsh
         run: |
           ./tests/verify-installer.ps1 `
-            -Installer (Join-Path $env:GITHUB_WORKSPACE 'LAN-Messenger-Searchable-History-Setup.exe')
+            -Installer (Join-Path $env:GITHUB_WORKSPACE 'MBC-LAN-Messenger.exe')
 
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
           name: LAN-Messenger-Windows
           path: |
-            LAN-Messenger-Searchable-History-Setup.exe
+            MBC-LAN-Messenger.exe
           if-no-files-found: error

@@ -44,4 +44,16 @@ Assert-Contains 'lmc/src/resources/themes/Classic/Request.html' `
   "width='16' height='16'" `
   'Classic transfer request must reserve space for the 16px icon'
 
+# A completed transfer is terminal. Peer-offline cleanup consults the
+# pending-operation map, so it must be synchronized with the visible log.
+Assert-Contains 'lmc/src/messagelog.cpp' `
+  'if(currentOp == FO_Complete && op != FO_Complete)' `
+  'completed chat transfers must not regress after a disconnect'
+Assert-Contains 'lmc/src/messagelog.cpp' `
+  '(mode == FM_Send) ? sendFileMap : receiveFileMap;' `
+  'file status updates must synchronize the pending-operation map'
+Assert-Contains 'lmc/src/transferwindow.cpp' `
+  'if(view->state == FileView::TS_Complete)' `
+  'completed transfer-list entries must ignore late terminal errors'
+
 Write-Host 'Source regression contracts passed.'
