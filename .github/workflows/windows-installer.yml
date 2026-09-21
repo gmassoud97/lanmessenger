@@ -131,8 +131,6 @@ jobs:
           rcc -binary (Join-Path $source 'resource.qrc') -o (Join-Path $app 'lmc.rcc')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
-          Compress-Archive -Path (Join-Path $app '*') -DestinationPath (Join-Path $root 'LAN-Messenger-Searchable-History-Portable.zip') -Force
-
       - name: Build installer
         shell: pwsh
         run: |
@@ -147,8 +145,7 @@ jobs:
         shell: pwsh
         run: |
           ./tests/verify-installer.ps1 `
-            -Installer (Join-Path $env:GITHUB_WORKSPACE 'LAN-Messenger-Searchable-History-Setup.exe') `
-            -PortableZip (Join-Path $env:GITHUB_WORKSPACE 'LAN-Messenger-Searchable-History-Portable.zip')
+            -Installer (Join-Path $env:GITHUB_WORKSPACE 'LAN-Messenger-Searchable-History-Setup.exe')
 
       - name: Upload packages
         uses: actions/upload-artifact@v4
@@ -156,5 +153,4 @@ jobs:
           name: LAN-Messenger-Windows
           path: |
             LAN-Messenger-Searchable-History-Setup.exe
-            LAN-Messenger-Searchable-History-Portable.zip
           if-no-files-found: error
