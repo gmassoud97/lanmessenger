@@ -644,6 +644,20 @@ bool lmcMessaging::updateFolderTransfer(FileMode folderMode, FileOp folderOp, QS
                     xmlMessage = pMessage->clone();
                     emit messageReceived(MT_Folder, lpszUserId, &xmlMessage);
                     folderList[index].lastUpdated = QDateTime::currentDateTime();
+
+					// Once an empty folder has been created locally there is no file
+					// payload, progress event, or socket close that can advance the
+					// receiver's UI. Complete it immediately, while leaving the
+					// original Accept message unchanged so the sender can finish too.
+					if(folderList[index].fileCount == 0) {
+						XmlMessage completeMessage = pMessage->clone();
+						completeMessage.removeData(XN_FILEOP);
+						completeMessage.addData(XN_FILEOP, FileOpNames[FO_Complete]);
+						completeMessage.removeData(XN_FILEID);
+						completeMessage.addData(XN_FILEID, folderList[index].id);
+						emit messageReceived(MT_Folder, lpszUserId, &completeMessage);
+						folderList.removeAt(index);
+					}
                 }
                 break;
             case FO_Decline:

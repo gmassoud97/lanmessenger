@@ -20,6 +20,12 @@ Assert-Contains 'lmc/src/filemessagingproc.cpp' `
 Assert-Contains 'lmc/src/filemessagingproc.cpp' `
   'case FO_Complete:' `
   'received folder completion must update the transfer state'
+Assert-Contains 'lmc/src/filemessagingproc.cpp' `
+  'if(folderList[index].fileCount == 0) {' `
+  'an accepted empty folder must complete immediately on the receiver'
+Assert-Contains 'lmc/src/filemessagingproc.cpp' `
+  'emit messageReceived(MT_Folder, lpszUserId, &completeMessage);' `
+  'the receiver must publish the empty-folder completion to its UI'
 
 # Saved history must contain a real horizontal space between time and text.
 Assert-Contains 'lmc/src/messagelog.cpp' `
