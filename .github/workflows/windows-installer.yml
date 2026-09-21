@@ -74,6 +74,28 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Pop-Location
 
+      - name: Build and run regression tests
+        shell: pwsh
+        run: |
+          $root = $env:GITHUB_WORKSPACE
+          $testBuild = Join-Path $root 'build\tests'
+          New-Item -ItemType Directory -Force $testBuild | Out-Null
+          Push-Location $testBuild
+          qmake (Join-Path $root 'tests\tests.pro') CONFIG+=release
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          nmake
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          & (Join-Path $testBuild 'release\lmc-regression-tests.exe') -o test-results.txt,txt
+          $testExit = $LASTEXITCODE
+          Get-Content test-results.txt
+          if ($testExit) { exit $testExit }
+          Pop-Location
+
+      - name: Verify source regression contracts
+        shell: pwsh
+        run: ./tests/verify-source-contracts.ps1
+
       - name: Package application
         shell: pwsh
         run: |
@@ -120,6 +142,13 @@ jobs:
           $output = Join-Path $env:GITHUB_WORKSPACE 'LAN-Messenger-Searchable-History-Setup.exe'
           & $makensis "/DBuildDir=$app" "/DOutputFile=$output" (Join-Path $env:GITHUB_WORKSPACE 'lmc\setup\win32\setup-modern.nsi')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Test Windows packages and installer
+        shell: pwsh
+        run: |
+          ./tests/verify-installer.ps1 `
+            -Installer (Join-Path $env:GITHUB_WORKSPACE 'LAN-Messenger-Searchable-History-Setup.exe') `
+            -PortableZip (Join-Path $env:GITHUB_WORKSPACE 'LAN-Messenger-Searchable-History-Portable.zip')
 
       - name: Upload packages
         uses: actions/upload-artifact@v4
