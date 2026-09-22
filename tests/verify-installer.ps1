@@ -26,6 +26,13 @@ foreach ($required in @('lmc.exe', 'libcrypto-1_1-x64.dll', 'libssl-1_1-x64.dll'
   }
 }
 
+foreach ($theme in @('Bubble', 'Dark Bubble', 'Digg', 'Ping Pong')) {
+  foreach ($template in @('main.css', 'Incoming\Content.html', 'Outgoing\Content.html', 'Request.html')) {
+    $path = Join-Path (Join-Path $installDir "themes\$theme") $template
+    if (-not (Test-Path $path)) { throw "Installed theme is missing $path" }
+  }
+}
+
 $appVersion = (Get-Item (Join-Path $installDir 'lmc.exe')).VersionInfo
 if ($appVersion.FileVersion -notmatch '^1\.2\.39') {
   throw "Unexpected lmc.exe version: $($appVersion.FileVersion)"

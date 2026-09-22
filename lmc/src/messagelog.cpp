@@ -24,6 +24,7 @@
 
 #include <QMenu>
 #include <QAction>
+#include <QFile>
 #include <QScrollBar>
 #include <QTextBlock>
 #include <stdexcept>
@@ -74,6 +75,9 @@ void lmcMessageLog::initMessageLog(QString themePath, bool clearLog) {
 void lmcMessageLog::reloadTheme()
 {
     themeData = lmcTheme::loadTheme(themePath);
+    QFile stylesheet(themeData.themePath + "/main.css");
+    setDefaultStyleSheet(stylesheet.open(QIODevice::ReadOnly)
+        ? QString::fromUtf8(stylesheet.readAll()) : QString());
     clear();
 }
 
@@ -759,7 +763,7 @@ QString lmcMessageLog::getFileMessageText(MessageType type, QString* lpszUserNam
                     fileOperation(fileId, acceptOp, fileType);
 			} else {
                 html.replace("%links%",
-                    "<a href='lmc://" + fileType + "/" + acceptOp + "/" + fileId + "'>" + tr("Accept") + "</a>&nbsp;&nbsp;" +
+                    "<a href='lmc://" + fileType + "/" + acceptOp + "/" + fileId + "'>" + tr("Accept") + "</a>&#x3000;" +
                     "<a href='lmc://" + fileType + "/" + declineOp + "/" + fileId + "'>" + tr("Decline") + "</a>");
 			}
 			break;

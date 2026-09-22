@@ -121,12 +121,13 @@ jobs:
             }
           }
 
-          New-Item -ItemType Directory -Force (Join-Path $app 'lang'), (Join-Path $app 'sounds') | Out-Null
+          New-Item -ItemType Directory -Force (Join-Path $app 'lang'), (Join-Path $app 'sounds'), (Join-Path $app 'themes') | Out-Null
           Get-ChildItem -Path $source -Filter '*.ts' | ForEach-Object {
             lrelease $_.FullName -qm (Join-Path $app ('lang\' + $_.BaseName + '.qm'))
           }
           Copy-Item (Join-Path $source 'resources\lang\system') (Join-Path $app 'lang\system') -Recurse -Force
           Copy-Item (Join-Path $source 'resources\sounds\*') (Join-Path $app 'sounds') -Recurse -Force
+          Copy-Item (Join-Path $source 'resources\themes\*') (Join-Path $app 'themes') -Recurse -Force
           Copy-Item (Join-Path $source 'resources\text\license.txt') (Join-Path $app 'COPYING.txt') -Force
           rcc -binary (Join-Path $source 'resource.qrc') -o (Join-Path $app 'lmc.rcc')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
