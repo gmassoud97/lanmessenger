@@ -121,12 +121,13 @@ jobs:
             }
           }
 
-          New-Item -ItemType Directory -Force (Join-Path $app 'lang'), (Join-Path $app 'sounds') | Out-Null
+          New-Item -ItemType Directory -Force (Join-Path $app 'lang'), (Join-Path $app 'sounds'), (Join-Path $app 'themes') | Out-Null
           Get-ChildItem -Path $source -Filter '*.ts' | ForEach-Object {
             lrelease $_.FullName -qm (Join-Path $app ('lang\' + $_.BaseName + '.qm'))
           }
           Copy-Item (Join-Path $source 'resources\lang\system') (Join-Path $app 'lang\system') -Recurse -Force
           Copy-Item (Join-Path $source 'resources\sounds\*') (Join-Path $app 'sounds') -Recurse -Force
+          Copy-Item (Join-Path $source 'resources\themes\*') (Join-Path $app 'themes') -Recurse -Force
           Copy-Item (Join-Path $source 'resources\text\license.txt') (Join-Path $app 'COPYING.txt') -Force
           rcc -binary (Join-Path $source 'resource.qrc') -o (Join-Path $app 'lmc.rcc')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
@@ -137,7 +138,7 @@ jobs:
           choco install nsis -y --no-progress
           $makensis = 'C:\Program Files (x86)\NSIS\makensis.exe'
           $app = Join-Path $env:GITHUB_WORKSPACE 'build\app'
-          $output = Join-Path $env:GITHUB_WORKSPACE 'LAN-Messenger-Searchable-History-Setup.exe'
+          $output = Join-Path $env:GITHUB_WORKSPACE 'MBC-LAN-Messenger.exe'
           & $makensis "/DBuildDir=$app" "/DOutputFile=$output" (Join-Path $env:GITHUB_WORKSPACE 'lmc\setup\win32\setup-modern.nsi')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
@@ -145,12 +146,12 @@ jobs:
         shell: pwsh
         run: |
           ./tests/verify-installer.ps1 `
-            -Installer (Join-Path $env:GITHUB_WORKSPACE 'LAN-Messenger-Searchable-History-Setup.exe')
+            -Installer (Join-Path $env:GITHUB_WORKSPACE 'MBC-LAN-Messenger.exe')
 
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
           name: LAN-Messenger-Windows
           path: |
-            LAN-Messenger-Searchable-History-Setup.exe
+            MBC-LAN-Messenger.exe
           if-no-files-found: error

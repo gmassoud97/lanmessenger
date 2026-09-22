@@ -24,6 +24,7 @@
 
 #include <QMenu>
 #include <QAction>
+#include <QFile>
 #include <QScrollBar>
 #include <QTextBlock>
 #include <stdexcept>
@@ -74,6 +75,9 @@ void lmcMessageLog::initMessageLog(QString themePath, bool clearLog) {
 void lmcMessageLog::reloadTheme()
 {
     themeData = lmcTheme::loadTheme(themePath);
+    QFile stylesheet(themeData.themePath + "/main.css");
+    document()->setDefaultStyleSheet(stylesheet.open(QIODevice::ReadOnly)
+        ? QString::fromUtf8(stylesheet.readAll()) : QString());
     clear();
 }
 
@@ -209,10 +213,27 @@ void lmcMessageLog::updateFileMessage(FileMode mode, FileOp op, QString fileId)
 		SingleMessage msg = messageLog.at(index);
 		if(tempId.compare(msg.id) == 0) {
 			XmlMessage xmlMessage = msg.message;
+			FileOp currentOp = (FileOp)Helper::indexOf(FileOpNames, FO_Max,
+				xmlMessage.data(XN_FILEOP));
+			// Completion is final. A later disconnect/abort notification must not
+			// turn a successfully completed transfer into an interrupted one.
+			if(currentOp == FO_Complete && op != FO_Complete)
+				return;
 			xmlMessage.removeData(XN_FILEOP);
 			xmlMessage.addData(XN_FILEOP, FileOpNames[op]);
 			msg.message = xmlMessage;
 			messageLog[index] = msg;
+
+			// Keep the pending-operation map in sync with the visible message.
+			// abortPendingFileOperations() consults this map when a peer goes
+			// offline; leaving it at FO_Request used to overwrite FO_Complete.
+			QMap<QString, XmlMessage>& fileMap =
+				(mode == FM_Send) ? sendFileMap : receiveFileMap;
+			QMap<QString, XmlMessage>::iterator mapEntry = fileMap.find(fileId);
+			if(mapEntry != fileMap.end()) {
+				mapEntry.value().removeData(XN_FILEOP);
+				mapEntry.value().addData(XN_FILEOP, FileOpNames[op]);
+			}
 
             QString html = getFileMessageText(msg.type, &msg.userName, &msg.message);
             replaceMessageLog(MT_File, tempId, html);
@@ -742,7 +763,7 @@ QString lmcMessageLog::getFileMessageText(MessageType type, QString* lpszUserNam
                     fileOperation(fileId, acceptOp, fileType);
 			} else {
                 html.replace("%links%",
-                    "<a href='lmc://" + fileType + "/" + acceptOp + "/" + fileId + "'>" + tr("Accept") + "</a>&nbsp;&nbsp;" +
+                    "<a href='lmc://" + fileType + "/" + acceptOp + "/" + fileId + "'>" + tr("Accept") + "</a>&#x3000;" +
                     "<a href='lmc://" + fileType + "/" + declineOp + "/" + fileId + "'>" + tr("Decline") + "</a>");
 			}
 			break;

@@ -142,6 +142,8 @@ void lmcTransferWindow::receiveMessage(MessageType type, QString* lpszUserId, Xm
         view = ui.lvTransferList->item(id, transferMode);
         if(!view)
             return;
+		if(view->state == FileView::TS_Complete)
+			return;
         itemIndex = ui.lvTransferList->itemIndex(id, transferMode);
         view->state = FileView::TS_Cancel;
         break;
@@ -156,6 +158,8 @@ void lmcTransferWindow::receiveMessage(MessageType type, QString* lpszUserId, Xm
         view = ui.lvTransferList->item(id, transferMode);
         if(!view)
             return;
+		if(view->state == FileView::TS_Complete)
+			return;
         itemIndex = ui.lvTransferList->itemIndex(id, transferMode);
         view->state = FileView::TS_Abort;
         break;
@@ -163,6 +167,8 @@ void lmcTransferWindow::receiveMessage(MessageType type, QString* lpszUserId, Xm
         view = ui.lvTransferList->item(id, transferMode);
         if(!view)
             return;
+		if(view->state == FileView::TS_Complete)
+			return;
         itemIndex = ui.lvTransferList->itemIndex(id, transferMode);
         view->state = FileView::TS_Abort;
         break;

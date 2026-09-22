@@ -15,7 +15,7 @@ SetCompressor /SOLID lzma
 !endif
 
 !ifndef OutputFile
-  !define OutputFile "LAN-Messenger-Searchable-History-Setup.exe"
+  !define OutputFile "MBC-LAN-Messenger.exe"
 !endif
 
 Name "${ProductName}"
