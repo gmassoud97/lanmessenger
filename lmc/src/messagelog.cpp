@@ -76,7 +76,7 @@ void lmcMessageLog::reloadTheme()
 {
     themeData = lmcTheme::loadTheme(themePath);
     QFile stylesheet(themeData.themePath + "/main.css");
-    setDefaultStyleSheet(stylesheet.open(QIODevice::ReadOnly)
+    document()->setDefaultStyleSheet(stylesheet.open(QIODevice::ReadOnly)
         ? QString::fromUtf8(stylesheet.readAll()) : QString());
     clear();
 }
