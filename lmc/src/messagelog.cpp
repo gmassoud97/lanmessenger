@@ -24,6 +24,9 @@
 
 #include <QMenu>
 #include <QAction>
+#include <QBrush>
+#include <QColor>
+#include <QDir>
 #include <QFile>
 #include <QScrollBar>
 #include <QTextBlock>
@@ -560,11 +563,56 @@ void lmcMessageLog::replaceMessageLog(MessageType type, QString id, QString html
 
 void lmcMessageLog::insertMessageLog(QTextCursor cursor, QString &html, MessageType type, QTextBlockData *data)
 {
+    QString themeName = QDir::fromNativeSeparators(themeData.themePath).section('/', -1);
+    bool bubbleTheme = themeName == "Bubble" || themeName == "Dark Bubble";
+    bool nextBubbleMessage = bubbleTheme && html.contains("data-lmc-next='true'");
+
+    // The original WebKit themes inserted consecutive messages into the
+    // preceding bubble. QTextBrowser has no DOM insertion API, so append the
+    // fragment directly to the most recent QTextFrame instead.
+    if(nextBubbleMessage) {
+        QList<QTextFrame *> frames = document()->rootFrame()->childFrames();
+        if(!frames.isEmpty()) {
+            QTextFrame *frame = frames.last();
+            QTextCursor insertCursor = frame->lastCursorPosition();
+            insertCursor.insertBlock();
+
+            QTextDocument themedDocument;
+            themedDocument.setDefaultStyleSheet(themeStyleSheet);
+            themedDocument.setHtml(html);
+            insertCursor.insertFragment(QTextDocumentFragment(&themedDocument));
+
+            QTextBlock block = insertCursor.block();
+            block.setUserState(type);
+            if(data != nullptr)
+                block.setUserData(data);
+            return;
+        }
+    }
+
     QTextFrameFormat frameFormat;
-    frameFormat.setMargin(0);
-    frameFormat.setTopMargin(-12);
-    frameFormat.setPadding(0);
-    frameFormat.setBorder(0);
+    if(bubbleTheme && html.contains("data-lmc-bubble=")) {
+        bool dark = themeName == "Dark Bubble";
+        QColor background = dark ? QColor("#005500") : QColor("#FFFFFF");
+        QColor border = dark ? QColor("#FF0000") : QColor("#938F5A");
+
+        if(html.contains("data-lmc-bubble='outgoing'"))
+            background = dark ? QColor("#000055") : QColor("#F2F4CC");
+        else if(html.contains("data-lmc-bubble='broadcast'"))
+            background = dark ? QColor("#005500") : QColor("#D3F4CC");
+
+        frameFormat.setMargin(3);
+        frameFormat.setPadding(5);
+        frameFormat.setBorder(1);
+        frameFormat.setBorderStyle(QTextFrameFormat::BorderStyle_Solid);
+        frameFormat.setBorderBrush(QBrush(border));
+        frameFormat.setBackground(QBrush(background));
+    } else {
+        frameFormat.setMargin(0);
+        frameFormat.setTopMargin(-12);
+        frameFormat.setPadding(0);
+        frameFormat.setBorder(0);
+    }
     QTextFrame *frame = cursor.insertFrame(frameFormat);
     frame->frameFormat().setMargin(0);
 

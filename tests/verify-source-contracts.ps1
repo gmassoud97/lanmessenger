@@ -71,4 +71,19 @@ Assert-Contains 'lmc/src/messagelog.cpp' `
   'insertFragment(QTextDocumentFragment(&themedDocument))' `
   'message fragments must retain their resolved theme formatting'
 
+# Bubble themes use Qt rich-text-compatible tables and explicit frame
+# formatting instead of WebKit-only floating DIV layouts.
+Assert-Contains 'lmc/src/resources/themes/Bubble/Incoming/Content.html' `
+  "data-lmc-bubble='incoming'" `
+  'Bubble incoming messages must identify their frame style'
+Assert-Contains 'lmc/src/resources/themes/Bubble/Incoming/Content.html' `
+  "<table width='100%'" `
+  'Bubble incoming messages must use Qt-compatible table layout'
+Assert-Contains 'lmc/src/resources/themes/Dark Bubble/Outgoing/Content.html' `
+  "data-lmc-bubble='outgoing'" `
+  'Dark Bubble outgoing messages must identify their frame style'
+Assert-Contains 'lmc/src/messagelog.cpp' `
+  "html.contains(`"data-lmc-next='true'`")" `
+  'consecutive Bubble messages must remain in the preceding frame'
+
 Write-Host 'Source regression contracts passed.'
