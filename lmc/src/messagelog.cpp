@@ -82,7 +82,9 @@ void lmcMessageLog::reloadTheme()
     // QTextDocument applies its stylesheet while parsing HTML. Loading the
     // empty document template here ensures later insertHtml() fragments use
     // the selected theme instead of appearing as unstyled plain content.
-    setHtml(docTemplate.arg(css));
+    setHtml(QString("<html><head><style type='text/css'>%1</style></head>"
+        "<body style='-webkit-nbsp-mode: space; word-wrap:break-word;'>"
+        "</body></html>").arg(css));
 }
 
 void lmcMessageLog::createContextMenu(void) {
