@@ -62,4 +62,13 @@ Assert-Contains 'lmc/src/theme.cpp' `
   'if(themeNames.contains(dirName))' `
   'theme discovery must suppress duplicate theme names'
 
+# QTextCursor inserts messages as fragments, which can lose document-level
+# CSS. Resolve the selected theme in a temporary document before insertion.
+Assert-Contains 'lmc/src/messagelog.cpp' `
+  'themedDocument.setDefaultStyleSheet(themeStyleSheet);' `
+  'message fragments must parse with the selected theme stylesheet'
+Assert-Contains 'lmc/src/messagelog.cpp' `
+  'insertFragment(QTextDocumentFragment(&themedDocument))' `
+  'message fragments must retain their resolved theme formatting'
+
 Write-Host 'Source regression contracts passed.'
