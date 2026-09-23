@@ -76,9 +76,13 @@ void lmcMessageLog::reloadTheme()
 {
     themeData = lmcTheme::loadTheme(themePath);
     QFile stylesheet(themeData.themePath + "/main.css");
-    document()->setDefaultStyleSheet(stylesheet.open(QIODevice::ReadOnly)
-        ? QString::fromUtf8(stylesheet.readAll()) : QString());
-    clear();
+    QString css = stylesheet.open(QIODevice::ReadOnly)
+        ? QString::fromUtf8(stylesheet.readAll()) : QString();
+    document()->setDefaultStyleSheet(css);
+    // QTextDocument applies its stylesheet while parsing HTML. Loading the
+    // empty document template here ensures later insertHtml() fragments use
+    // the selected theme instead of appearing as unstyled plain content.
+    setHtml(docTemplate.arg(css));
 }
 
 void lmcMessageLog::createContextMenu(void) {

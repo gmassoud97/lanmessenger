@@ -56,4 +56,10 @@ Assert-Contains 'lmc/src/transferwindow.cpp' `
   'if(view->state == FileView::TS_Complete)' `
   'completed transfer-list entries must ignore late terminal errors'
 
+# Classic exists both in the embedded resource and in the installed themes
+# folder. Theme discovery must show each name only once.
+Assert-Contains 'lmc/src/theme.cpp' `
+  'if(themeNames.contains(dirName))' `
+  'theme discovery must suppress duplicate theme names'
+
 Write-Host 'Source regression contracts passed.'
