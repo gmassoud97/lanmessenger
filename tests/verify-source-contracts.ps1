@@ -43,6 +43,12 @@ Assert-Contains 'lmc/src/resources/themes/Classic/Request.html' `
 Assert-Contains 'lmc/src/resources/themes/Classic/Request.html' `
   "width='16' height='16'" `
   'Classic transfer request must reserve space for the 16px icon'
+Assert-Contains 'lmc/src/resources/themes/Classic/Broadcast.html' `
+  "width='24' valign='top' style='padding-top: 2px; padding-right: 8px;'" `
+  'Classic broadcasts must reserve a padded icon column'
+Assert-Contains 'lmc/src/resources/themes/Classic/Broadcast.html' `
+  "width='16' height='16'" `
+  'Classic broadcasts must reserve space for the 16px icon'
 
 # A completed transfer is terminal. Peer-offline cleanup consults the
 # pending-operation map, so it must be synchronized with the visible log.
@@ -84,6 +90,15 @@ Assert-Contains 'lmc/src/resources/themes/Dark Bubble/Outgoing/Content.html' `
   'Dark Bubble outgoing messages must identify their frame style'
 Assert-Contains 'lmc/src/messagelog.cpp' `
   "html.contains(`"data-lmc-next='true'`")" `
-  'consecutive Bubble messages must remain in the preceding frame'
+  'consecutive converted-theme messages must remain in the preceding frame'
+Assert-Contains 'lmc/src/resources/themes/Digg/Incoming/Content.html' `
+  "<table width='100%'" `
+  'Digg messages must use Qt-compatible table layout'
+Assert-Contains 'lmc/src/resources/themes/Ping Pong/Incoming/Content.html' `
+  "align='right'" `
+  'Ping Pong incoming messages must retain right-side alignment'
+Assert-Contains 'lmc/src/resources/themes/Ping Pong/Outgoing/Content.html' `
+  "<td width='38' valign='top'><img" `
+  'Ping Pong outgoing messages must retain left-side avatars'
 
 Write-Host 'Source regression contracts passed.'

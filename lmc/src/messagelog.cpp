@@ -565,12 +565,13 @@ void lmcMessageLog::insertMessageLog(QTextCursor cursor, QString &html, MessageT
 {
     QString themeName = QDir::fromNativeSeparators(themeData.themePath).section('/', -1);
     bool bubbleTheme = themeName == "Bubble" || themeName == "Dark Bubble";
-    bool nextBubbleMessage = bubbleTheme && html.contains("data-lmc-next='true'");
+    bool convertedTheme = bubbleTheme || themeName == "Digg" || themeName == "Ping Pong";
+    bool nextThemeMessage = convertedTheme && html.contains("data-lmc-next='true'");
 
     // The original WebKit themes inserted consecutive messages into the
     // preceding bubble. QTextBrowser has no DOM insertion API, so append the
     // fragment directly to the most recent QTextFrame instead.
-    if(nextBubbleMessage) {
+    if(nextThemeMessage) {
         QList<QTextFrame *> frames = document()->rootFrame()->childFrames();
         if(!frames.isEmpty()) {
             QTextFrame *frame = frames.last();
