@@ -120,6 +120,7 @@ private:
 	QMap<QString, XmlMessage> receiveFileMap;
 	QList<SingleMessage> messageLog;
 	ThemeData themeData;
+	QString themeStyleSheet;
 	QMenu* contextMenu;
 	QAction* copyAction;
 	QAction* copyLinkAction;

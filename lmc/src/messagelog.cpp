@@ -24,9 +24,14 @@
 
 #include <QMenu>
 #include <QAction>
+#include <QBrush>
+#include <QColor>
+#include <QDir>
 #include <QFile>
 #include <QScrollBar>
 #include <QTextBlock>
+#include <QTextDocument>
+#include <QTextDocumentFragment>
 #include <stdexcept>
 #include "messagelog.h"
 
@@ -76,8 +81,9 @@ void lmcMessageLog::reloadTheme()
 {
     themeData = lmcTheme::loadTheme(themePath);
     QFile stylesheet(themeData.themePath + "/main.css");
-    document()->setDefaultStyleSheet(stylesheet.open(QIODevice::ReadOnly)
-        ? QString::fromUtf8(stylesheet.readAll()) : QString());
+    themeStyleSheet = stylesheet.open(QIODevice::ReadOnly)
+        ? QString::fromUtf8(stylesheet.readAll()) : QString();
+    document()->setDefaultStyleSheet(themeStyleSheet);
     clear();
 }
 
@@ -557,14 +563,68 @@ void lmcMessageLog::replaceMessageLog(MessageType type, QString id, QString html
 
 void lmcMessageLog::insertMessageLog(QTextCursor cursor, QString &html, MessageType type, QTextBlockData *data)
 {
+    QString themeName = QDir::fromNativeSeparators(themeData.themePath).section('/', -1);
+    bool bubbleTheme = themeName == "Bubble" || themeName == "Dark Bubble";
+    bool convertedTheme = bubbleTheme || themeName == "Digg" || themeName == "Ping Pong";
+    bool nextThemeMessage = convertedTheme && html.contains("data-lmc-next='true'");
+
+    // The original WebKit themes inserted consecutive messages into the
+    // preceding bubble. QTextBrowser has no DOM insertion API, so append the
+    // fragment directly to the most recent QTextFrame instead.
+    if(nextThemeMessage) {
+        QList<QTextFrame *> frames = document()->rootFrame()->childFrames();
+        if(!frames.isEmpty()) {
+            QTextFrame *frame = frames.last();
+            QTextCursor insertCursor = frame->lastCursorPosition();
+            insertCursor.insertBlock();
+
+            QTextDocument themedDocument;
+            themedDocument.setDefaultStyleSheet(themeStyleSheet);
+            themedDocument.setHtml(html);
+            insertCursor.insertFragment(QTextDocumentFragment(&themedDocument));
+
+            QTextBlock block = insertCursor.block();
+            block.setUserState(type);
+            if(data != nullptr)
+                block.setUserData(data);
+            return;
+        }
+    }
+
     QTextFrameFormat frameFormat;
-    frameFormat.setMargin(0);
-    frameFormat.setTopMargin(-12);
-    frameFormat.setPadding(0);
-    frameFormat.setBorder(0);
+    if(bubbleTheme && html.contains("data-lmc-bubble=")) {
+        bool dark = themeName == "Dark Bubble";
+        QColor background = dark ? QColor("#005500") : QColor("#FFFFFF");
+        QColor border = dark ? QColor("#FF0000") : QColor("#938F5A");
+
+        if(html.contains("data-lmc-bubble='outgoing'"))
+            background = dark ? QColor("#000055") : QColor("#F2F4CC");
+        else if(html.contains("data-lmc-bubble='broadcast'"))
+            background = dark ? QColor("#005500") : QColor("#D3F4CC");
+
+        frameFormat.setMargin(3);
+        frameFormat.setPadding(5);
+        frameFormat.setBorder(1);
+        frameFormat.setBorderStyle(QTextFrameFormat::BorderStyle_Solid);
+        frameFormat.setBorderBrush(QBrush(border));
+        frameFormat.setBackground(QBrush(background));
+    } else {
+        frameFormat.setMargin(0);
+        frameFormat.setTopMargin(-12);
+        frameFormat.setPadding(0);
+        frameFormat.setBorder(0);
+    }
     QTextFrame *frame = cursor.insertFrame(frameFormat);
     frame->frameFormat().setMargin(0);
-    frame->firstCursorPosition().insertHtml(html);
+
+    // QTextCursor::insertHtml() treats its input as a fragment and does not
+    // consistently resolve the document stylesheet. Parse the message as a
+    // complete temporary document first so class-based theme rules become
+    // concrete QText formats before the fragment is inserted in the log.
+    QTextDocument themedDocument;
+    themedDocument.setDefaultStyleSheet(themeStyleSheet);
+    themedDocument.setHtml(html);
+    frame->firstCursorPosition().insertFragment(QTextDocumentFragment(&themedDocument));
 
     QTextBlock block = frame->firstCursorPosition().block();
 

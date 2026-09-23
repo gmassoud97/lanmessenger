@@ -23,6 +23,7 @@
 
 
 #include "theme.h"
+#include <QSet>
 
 const QString defTheme = StdLocation::resThemeDir() + "/Classic";
 
@@ -43,23 +44,31 @@ const Themes lmcTheme::availableThemes(void) {
 	QDir::SortFlags sort = QDir::Name;
 
 	Themes themes;
+	QSet<QString> themeNames;
 
 	QDir dir(StdLocation::resThemeDir());
 	QStringList entries = dir.entryList(QStringList(), filters, sort);
 	foreach(QString dirName, entries) {
 		themes.append(Theme(dirName, dir.absoluteFilePath(dirName)));
+		themeNames.insert(dirName);
 	}
 
 	dir.setPath(StdLocation::sysThemeDir());
 	entries = dir.entryList(QStringList(), filters, sort);
 	foreach(QString dirName, entries) {
+		if(themeNames.contains(dirName))
+			continue;
 		themes.append(Theme(dirName, dir.absoluteFilePath(dirName)));
+		themeNames.insert(dirName);
 	}
 
 	dir.setPath(StdLocation::userThemeDir());
 	entries = dir.entryList(QStringList(), filters, sort);
 	foreach(QString dirName, entries) {
+		if(themeNames.contains(dirName))
+			continue;
 		themes.append(Theme(dirName, dir.absoluteFilePath(dirName)));
+		themeNames.insert(dirName);
 	}
 
 	return themes;

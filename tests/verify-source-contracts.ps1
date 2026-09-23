@@ -43,6 +43,12 @@ Assert-Contains 'lmc/src/resources/themes/Classic/Request.html' `
 Assert-Contains 'lmc/src/resources/themes/Classic/Request.html' `
   "width='16' height='16'" `
   'Classic transfer request must reserve space for the 16px icon'
+Assert-Contains 'lmc/src/resources/themes/Classic/Broadcast.html' `
+  "width='24' valign='top' style='padding-top: 2px; padding-right: 8px;'" `
+  'Classic broadcasts must reserve a padded icon column'
+Assert-Contains 'lmc/src/resources/themes/Classic/Broadcast.html' `
+  "width='16' height='16'" `
+  'Classic broadcasts must reserve space for the 16px icon'
 
 # A completed transfer is terminal. Peer-offline cleanup consults the
 # pending-operation map, so it must be synchronized with the visible log.
@@ -55,5 +61,44 @@ Assert-Contains 'lmc/src/messagelog.cpp' `
 Assert-Contains 'lmc/src/transferwindow.cpp' `
   'if(view->state == FileView::TS_Complete)' `
   'completed transfer-list entries must ignore late terminal errors'
+
+# Classic exists both in the embedded resource and in the installed themes
+# folder. Theme discovery must show each name only once.
+Assert-Contains 'lmc/src/theme.cpp' `
+  'if(themeNames.contains(dirName))' `
+  'theme discovery must suppress duplicate theme names'
+
+# QTextCursor inserts messages as fragments, which can lose document-level
+# CSS. Resolve the selected theme in a temporary document before insertion.
+Assert-Contains 'lmc/src/messagelog.cpp' `
+  'themedDocument.setDefaultStyleSheet(themeStyleSheet);' `
+  'message fragments must parse with the selected theme stylesheet'
+Assert-Contains 'lmc/src/messagelog.cpp' `
+  'insertFragment(QTextDocumentFragment(&themedDocument))' `
+  'message fragments must retain their resolved theme formatting'
+
+# Bubble themes use Qt rich-text-compatible tables and explicit frame
+# formatting instead of WebKit-only floating DIV layouts.
+Assert-Contains 'lmc/src/resources/themes/Bubble/Incoming/Content.html' `
+  "data-lmc-bubble='incoming'" `
+  'Bubble incoming messages must identify their frame style'
+Assert-Contains 'lmc/src/resources/themes/Bubble/Incoming/Content.html' `
+  "<table width='100%'" `
+  'Bubble incoming messages must use Qt-compatible table layout'
+Assert-Contains 'lmc/src/resources/themes/Dark Bubble/Outgoing/Content.html' `
+  "data-lmc-bubble='outgoing'" `
+  'Dark Bubble outgoing messages must identify their frame style'
+Assert-Contains 'lmc/src/messagelog.cpp' `
+  "html.contains(`"data-lmc-next='true'`")" `
+  'consecutive converted-theme messages must remain in the preceding frame'
+Assert-Contains 'lmc/src/resources/themes/Digg/Incoming/Content.html' `
+  "<table width='100%'" `
+  'Digg messages must use Qt-compatible table layout'
+Assert-Contains 'lmc/src/resources/themes/Ping Pong/Incoming/Content.html' `
+  "align='right'" `
+  'Ping Pong incoming messages must retain right-side alignment'
+Assert-Contains 'lmc/src/resources/themes/Ping Pong/Outgoing/Content.html' `
+  "<td width='38' valign='top'><img" `
+  'Ping Pong outgoing messages must retain left-side avatars'
 
 Write-Host 'Source regression contracts passed.'
