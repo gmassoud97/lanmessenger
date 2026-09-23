@@ -27,6 +27,8 @@
 #include <QFile>
 #include <QScrollBar>
 #include <QTextBlock>
+#include <QTextDocument>
+#include <QTextDocumentFragment>
 #include <stdexcept>
 #include "messagelog.h"
 
@@ -76,15 +78,10 @@ void lmcMessageLog::reloadTheme()
 {
     themeData = lmcTheme::loadTheme(themePath);
     QFile stylesheet(themeData.themePath + "/main.css");
-    QString css = stylesheet.open(QIODevice::ReadOnly)
+    themeStyleSheet = stylesheet.open(QIODevice::ReadOnly)
         ? QString::fromUtf8(stylesheet.readAll()) : QString();
-    document()->setDefaultStyleSheet(css);
-    // QTextDocument applies its stylesheet while parsing HTML. Loading the
-    // empty document template here ensures later insertHtml() fragments use
-    // the selected theme instead of appearing as unstyled plain content.
-    setHtml(QString("<html><head><style type='text/css'>%1</style></head>"
-        "<body style='-webkit-nbsp-mode: space; word-wrap:break-word;'>"
-        "</body></html>").arg(css));
+    document()->setDefaultStyleSheet(themeStyleSheet);
+    clear();
 }
 
 void lmcMessageLog::createContextMenu(void) {
@@ -570,7 +567,15 @@ void lmcMessageLog::insertMessageLog(QTextCursor cursor, QString &html, MessageT
     frameFormat.setBorder(0);
     QTextFrame *frame = cursor.insertFrame(frameFormat);
     frame->frameFormat().setMargin(0);
-    frame->firstCursorPosition().insertHtml(html);
+
+    // QTextCursor::insertHtml() treats its input as a fragment and does not
+    // consistently resolve the document stylesheet. Parse the message as a
+    // complete temporary document first so class-based theme rules become
+    // concrete QText formats before the fragment is inserted in the log.
+    QTextDocument themedDocument;
+    themedDocument.setDefaultStyleSheet(themeStyleSheet);
+    themedDocument.setHtml(html);
+    frame->firstCursorPosition().insertFragment(QTextDocumentFragment(&themedDocument));
 
     QTextBlock block = frame->firstCursorPosition().block();
 
