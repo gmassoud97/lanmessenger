@@ -403,8 +403,9 @@ void lmcCore::connectionStateChanged(void) {
 		pBroadcastWindow->connectionStateChanged(connected);
 
 	if(pMessaging->isConnected() && !pMessaging->canReceive()) {
-		showPortConflictMessage();
-		exitApp();
+		// A listener can fail briefly while Windows restores the network after
+		// lock, sleep or Modern Standby. The network layer will retry it.
+		lmcTrace::write("Network listener temporarily unavailable; keeping the application open while retrying");
 	}
 }
 

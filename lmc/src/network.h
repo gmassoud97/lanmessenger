@@ -100,6 +100,7 @@ private:
 	lmcWebNetwork*			pWebNetwork;
 	lmcCrypto*				pCrypto;
 	QTimer*					pTimer;
+	int						listenerRetryCountdown;
     QString					interfaceName;
 	QNetworkInterface		networkInterface;
 };
