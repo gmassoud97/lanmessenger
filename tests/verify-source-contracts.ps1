@@ -101,4 +101,28 @@ Assert-Contains 'lmc/src/resources/themes/Ping Pong/Outgoing/Content.html' `
   "<td width='38' valign='top'><img" `
   'Ping Pong outgoing messages must retain left-side avatars'
 
+
+# A transient listener failure after Windows lock, sleep or resume must not
+# terminate the application. The network layer retries with a backoff.
+Assert-Contains 'lmc/src/network.cpp' `
+  'if(isConnected && !canReceive) {' `
+  'network listener failures must enter the retry path'
+Assert-Contains 'lmc/src/network.cpp' `
+  'listenerRetryCountdown = canReceive ? 0 : 4;' `
+  'repeated listener retries must use a backoff'
+Assert-Contains 'lmc/src/lmc.cpp' `
+  'keeping the application open while retrying' `
+  'transient listener failures must keep the application alive'
+
+$coreSource = Get-Content -Raw -Path (Join-Path $root 'lmc/src/lmc.cpp')
+$coreStart = $coreSource.IndexOf('void lmcCore::connectionStateChanged(void)')
+$coreEnd = $coreSource.IndexOf("`n}", $coreStart)
+if ($coreStart -lt 0 -or $coreEnd -lt $coreStart) {
+  throw 'Regression check failed: connectionStateChanged function was not found'
+}
+$coreFunction = $coreSource.Substring($coreStart, $coreEnd - $coreStart)
+if ($coreFunction.Contains('exitApp();')) {
+  throw 'Regression check failed: network reconnect handling must not exit the application'
+}
+
 Write-Host 'Source regression contracts passed.'
