@@ -28,6 +28,7 @@
 #include "mainwindow.h"
 #include "messagelog.h"
 #include "history.h"
+#include "stdlocation.h"
 
 lmcMainWindow::lmcMainWindow(QWidget *parent, Qt::WindowFlags flags) : QWidget(parent, flags) {
 	ui.setupUi(this);
@@ -411,6 +412,13 @@ void lmcMainWindow::trayFileAction_triggered(void) {
 	emit showTransfers();
 }
 
+void lmcMainWindow::openLogsAction_triggered(void) {
+	QDir logDir(StdLocation::logDir());
+	if(!logDir.exists())
+		logDir.mkpath(".");
+	QDesktopServices::openUrl(QUrl::fromLocalFile(logDir.absolutePath()));
+}
+
 void lmcMainWindow::traySettingsAction_triggered(void) {
 	emit showSettings();
 }
@@ -697,6 +705,8 @@ void lmcMainWindow::createMainMenu(void) {
 		this, SLOT(trayHistoryAction_triggered()), QKeySequence(Qt::CTRL + Qt::Key_H));
 	transferAction = pToolsMenu->addAction(QIcon(QPixmap(IDR_TRANSFER, "PNG")), "File &Transfers", 
 		this, SLOT(trayFileAction_triggered()), QKeySequence(Qt::CTRL + Qt::Key_J));
+	openLogsAction = pToolsMenu->addAction("Open &Logs Folder",
+		this, SLOT(openLogsAction_triggered()));
 	pToolsMenu->addSeparator();
 	settingsAction = pToolsMenu->addAction(QIcon(QPixmap(IDR_TOOLS, "PNG")), "&Preferences", 
 		this, SLOT(traySettingsAction_triggered()), QKeySequence::Preferences);
@@ -850,6 +860,7 @@ void lmcMainWindow::setUIText(void) {
 	pToolsMenu->setTitle(tr("&Tools"));
 	historyAction->setText(tr("&History"));
 	transferAction->setText(tr("File &Transfers"));
+	openLogsAction->setText(tr("Open &Logs Folder"));
 	settingsAction->setText(tr("&Preferences"));
 	pHelpMenu->setTitle(tr("&Help"));
 	helpAction->setText(tr("&Help"));
