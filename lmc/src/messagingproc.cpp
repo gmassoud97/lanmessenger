@@ -36,7 +36,10 @@ void lmcMessaging::sendBroadcast(MessageType type, XmlMessage* pMessage) {
 void lmcMessaging::sendAnnounce(void) {
 	XmlMessage announce;
 	announce.addData(XN_VERSION, IDA_VERSION);
-	sendBroadcast(MT_Announce, &announce);
+	// Original clients may react separately to multicast and subnet broadcast,
+	// opening duplicate TCP streams before either handshake completes. Send MBC
+	// discovery through the configured broadcast-address path only.
+	prepareBroadcast(MT_Announce, &announce, false);
 }
 
 //	A message is to be sent
@@ -176,7 +179,7 @@ void lmcMessaging::sendUserData(MessageType type, QueryOp op, QString* lpszUserI
 	pNetwork->sendMessage(lpszUserId, lpszAddress, &szMessage);
 }
 
-void lmcMessaging::prepareBroadcast(MessageType type, XmlMessage* pMessage) {
+void lmcMessaging::prepareBroadcast(MessageType type, XmlMessage* pMessage, bool includeMulticast) {
     if(!isConnected()) {
         lmcTrace::write("Warning: Not connected. Broadcast not sent");
         return;
@@ -188,7 +191,7 @@ void lmcMessaging::prepareBroadcast(MessageType type, XmlMessage* pMessage) {
 
 	lmcTrace::write("Sending broadcast type " + QString::number(type));
 	QString szMessage = Message::addHeader(type, msgId, &localUser->id, NULL, pMessage);
-	pNetwork->sendBroadcast(&szMessage);
+	pNetwork->sendBroadcast(&szMessage, includeMulticast);
 	lmcTrace::write("Broadcast sending done");
 }
 
