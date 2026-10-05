@@ -48,7 +48,7 @@ public:
 	void stop(void);
 	QString physicalAddress(void);
 	void setLocalId(QString* lpszLocalId);
-	void sendBroadcast(QString* lpszData);
+	void sendBroadcast(QString* lpszData, bool includeMulticast = true);
 	void addConnection(QString* lpszUserId, QString* lpszAddress, bool singleStreamPeer = false);
 	void sendMessage(QString* lpszReceiverId, QString* lpszAddress, QString* lpszData);
 	void initSendFile(QString* lpszReceiverId, QString* lpszAddress, QString* lpszData);
