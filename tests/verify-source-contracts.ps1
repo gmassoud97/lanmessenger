@@ -146,4 +146,20 @@ Assert-Contains 'lmc/src/tcpnetwork.cpp' `
   'if(!socket) {' `
   'newConnection handling must guard a missing pending socket'
 
+# Announcements from this branch carry a marker that original clients ignore.
+# Untagged original-client announcements are delayed and deduplicated, keeping
+# mixed-version networks compatible without simultaneous connection races.
+Assert-Contains 'lmc/src/messagingproc.cpp' `
+  'announce.addData(XN_VERSION, IDA_VERSION);' `
+  'MBC announcements must identify single-stream support'
+Assert-Contains 'lmc/src/messagingproc.cpp' `
+  'pendingLegacyConnections.insert(pHeader->userId, pHeader->address);' `
+  'original-client announcements must be delayed and deduplicated'
+Assert-Contains 'lmc/src/messaging.cpp' `
+  'QMap<QString, QString> connections = pendingLegacyConnections;' `
+  'delayed original-client connections must be processed'
+Assert-Contains 'lmc/src/messaging.cpp' `
+  'pendingLegacyConnections.clear();' `
+  'duplicate original-client announcements must collapse before connecting'
+
 Write-Host 'Source regression contracts passed.'
