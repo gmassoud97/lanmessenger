@@ -265,7 +265,9 @@ void lmcMessaging::timer_timeout(void) {
 		QString userId = index.key();
 		QString address = index.value();
 		if(!getUser(&userId))
-			pNetwork->addConnection(&userId, &address);
+			// Original and older MBC peers use the original protocol: the
+			// announcement receiver initiates regardless of id ordering.
+			pNetwork->addConnection(&userId, &address, false);
 		index++;
 	}
 }
