@@ -94,6 +94,7 @@ private slots:
 	void trayShowAction_triggered(void);
 	void trayHistoryAction_triggered(void);
 	void trayFileAction_triggered(void);
+	void openLogsAction_triggered(void);
 	void traySettingsAction_triggered(void);
 	void trayAboutAction_triggered(void);
 	void trayExitAction_triggered(void);
@@ -186,6 +187,7 @@ private:
 	QAction* exitAction;
 	QAction* historyAction;
 	QAction* transferAction;
+	QAction* openLogsAction;
 	QAction* settingsAction;
 	QAction* helpAction;
 	QAction* onlineAction;
