@@ -87,7 +87,7 @@ void lmcTcpNetwork::setCrypto(lmcCrypto* pCrypto) {
 	crypto = pCrypto;
 }
 
-void lmcTcpNetwork::addConnection(QString* lpszUserId, QString* lpszAddress) {
+void lmcTcpNetwork::addConnection(QString* lpszUserId, QString* lpszAddress, bool singleStreamPeer) {
     if(!isRunning) {
         lmcTrace::write("Warning: TCP server not running. Unable to connect");
         return;
@@ -107,7 +107,7 @@ void lmcTcpNetwork::addConnection(QString* lpszUserId, QString* lpszAddress) {
 		// When both peers see the same announcement, only the peer with the
 		// lexicographically smaller id initiates. This prevents two competing
 		// streams and two encryption handshakes for the same contact.
-		if(localId.compare(*lpszUserId, Qt::CaseSensitive) > 0) {
+		if(singleStreamPeer && localId.compare(*lpszUserId, Qt::CaseSensitive) > 0) {
 			lmcTrace::write("Waiting for canonical incoming TCP connection from user " + *lpszUserId);
 			return;
 		}
