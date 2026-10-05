@@ -125,8 +125,8 @@ void lmcNetwork::sendBroadcast(QString* lpszData) {
 	pUdpNetwork->sendBroadcast(lpszData);
 }
 
-void lmcNetwork::addConnection(QString* lpszUserId, QString* lpszAddress) {
-	pTcpNetwork->addConnection(lpszUserId, lpszAddress);
+void lmcNetwork::addConnection(QString* lpszUserId, QString* lpszAddress, bool singleStreamPeer) {
+	pTcpNetwork->addConnection(lpszUserId, lpszAddress, singleStreamPeer);
 }
 
 void lmcNetwork::sendMessage(QString* lpszReceiverId, QString* lpszAddress, QString* lpszData) {
