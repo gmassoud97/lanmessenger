@@ -285,7 +285,7 @@ void lmcMessaging::processBroadcast(MessageHeader* pHeader, XmlMessage* pMessage
 			if(pMessage && !pMessage->data(XN_VERSION).isEmpty()) {
 				// MBC peers support deterministic single-stream negotiation.
 				pendingLegacyConnections.remove(pHeader->userId);
-				pNetwork->addConnection(&pHeader->userId, &pHeader->address);
+				pNetwork->addConnection(&pHeader->userId, &pHeader->address, true);
 			} else {
 				// Original clients expect the receiver of an announcement to
 				// connect, but may also be reacting to our announcement. A short
