@@ -125,4 +125,25 @@ if ($coreFunction.Contains('exitApp();')) {
   throw 'Regression check failed: network reconnect handling must not exit the application'
 }
 
+# Each peer must have one owned message stream. Duplicate connection storms
+# previously overwrote QMap pointers, leaked streams and replaced crypto state.
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'Ignoring duplicate TCP connection request for user' `
+  'duplicate outgoing message streams must be suppressed'
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'Waiting for canonical incoming TCP connection from user' `
+  'simultaneous peer connects must have deterministic ownership'
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'messageMap.remove(*lpszUserId);' `
+  'disconnected message streams must be removed from the active map'
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'stream->deleteLater();' `
+  'disconnected message streams must be released'
+Assert-Contains 'lmc/src/netstreamer.cpp' `
+  'socket->setParent(this);' `
+  'accepted message sockets must be owned by their stream'
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'if(!socket) {' `
+  'newConnection handling must guard a missing pending socket'
+
 Write-Host 'Source regression contracts passed.'
