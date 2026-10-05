@@ -185,4 +185,16 @@ Assert-Contains 'lmc/src/udpnetwork.cpp' `
   'for(int index = 0; index < broadcastList.count(); index++)' `
   'compatibility discovery must retain configured subnet broadcast addresses'
 
+# Logs must be directly accessible for crash diagnosis without asking users
+# to navigate hidden AppData folders manually.
+Assert-Contains 'lmc/src/mainwindow.cpp' `
+  'openLogsAction = pToolsMenu->addAction("Open &Logs Folder"' `
+  'Tools menu must expose the logs folder'
+Assert-Contains 'lmc/src/mainwindow.cpp' `
+  'QDesktopServices::openUrl(QUrl::fromLocalFile(logDir.absolutePath()));' `
+  'logs action must open the actual local logs directory'
+Assert-Contains 'lmc/src/mainwindow.cpp' `
+  'logDir.mkpath(".");' `
+  'logs action must create the folder if it does not exist'
+
 Write-Host 'Source regression contracts passed.'
