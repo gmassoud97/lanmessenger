@@ -172,4 +172,17 @@ Assert-Contains 'lmc/src/tcpnetwork.cpp' `
   'if(singleStreamPeer && localId.compare(*lpszUserId, Qt::CaseSensitive) > 0)' `
   'id ordering must apply only to marked MBC peers'
 
+# Original clients can process the multicast and subnet-broadcast copies of
+# one announcement as separate connection requests. MBC announcements use the
+# configured broadcast addresses once; all other broadcasts remain unchanged.
+Assert-Contains 'lmc/src/messagingproc.cpp' `
+  'prepareBroadcast(MT_Announce, &announce, false);' `
+  'MBC announcements must avoid duplicate multicast delivery to original clients'
+Assert-Contains 'lmc/src/udpnetwork.cpp' `
+  'if(includeMulticast)' `
+  'UDP discovery must support broadcast-only compatibility mode'
+Assert-Contains 'lmc/src/udpnetwork.cpp' `
+  'for(int index = 0; index < broadcastList.count(); index++)' `
+  'compatibility discovery must retain configured subnet broadcast addresses'
+
 Write-Host 'Source regression contracts passed.'
