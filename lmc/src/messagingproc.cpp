@@ -30,6 +30,15 @@ void lmcMessaging::sendBroadcast(MessageType type, XmlMessage* pMessage) {
 	prepareBroadcast(type, pMessage);
 }
 
+// Mark MBC announcements without changing the wire format. Original clients
+// ignore the extra XML field; updated clients use it to avoid simultaneous
+// connections while retaining compatibility with the original protocol.
+void lmcMessaging::sendAnnounce(void) {
+	XmlMessage announce;
+	announce.addData(XN_VERSION, IDA_VERSION);
+	sendBroadcast(MT_Announce, &announce);
+}
+
 //	A message is to be sent
 void lmcMessaging::sendMessage(MessageType type, QString* lpszUserId, XmlMessage* pMessage) {
 	QString data = QString::null;
@@ -142,6 +151,7 @@ void lmcMessaging::receiveWebMessage(QString *lpszData) {
 
 //	Handshake procedure has been completed
 void lmcMessaging::newConnection(QString* lpszUserId, QString* lpszAddress) {
+	pendingLegacyConnections.remove(*lpszUserId);
 	lmcTrace::write("Connection completed with user " + *lpszUserId + " at " + *lpszAddress);
 	sendUserData(MT_UserData, QO_Get, lpszUserId, lpszAddress);
 }
@@ -261,7 +271,6 @@ void lmcMessaging::prepareMessage(MessageType type, qint64 msgId, bool retry, QS
 
 //	This method converts a Datagram from network layer to a Message that can be passed to ui layer
 void lmcMessaging::processBroadcast(MessageHeader* pHeader, XmlMessage* pMessage) {
-	Q_UNUSED(pMessage);
 
 	//	do not process broadcasts from local user unless loopback is specified in command line
 	if(!loopback && pHeader->userId.compare(localUser->id) == 0)
@@ -272,8 +281,18 @@ void lmcMessaging::processBroadcast(MessageHeader* pHeader, XmlMessage* pMessage
 
 	switch(pHeader->type) {
 	case MT_Announce:
-		if(!getUser(&pHeader->userId))
-			pNetwork->addConnection(&pHeader->userId, &pHeader->address);
+		if(!getUser(&pHeader->userId)) {
+			if(pMessage && !pMessage->data(XN_VERSION).isEmpty()) {
+				// MBC peers support deterministic single-stream negotiation.
+				pendingLegacyConnections.remove(pHeader->userId);
+				pNetwork->addConnection(&pHeader->userId, &pHeader->address);
+			} else {
+				// Original clients expect the receiver of an announcement to
+				// connect, but may also be reacting to our announcement. A short
+				// delay prevents both sides from connecting simultaneously.
+				pendingLegacyConnections.insert(pHeader->userId, pHeader->address);
+			}
+		}
 		break;
 	case MT_Depart:
 		removeUser(pHeader->userId);
