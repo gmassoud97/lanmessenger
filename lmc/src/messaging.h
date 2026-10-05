@@ -178,7 +178,7 @@ private:
 	void getUserInfo(XmlMessage* pMessage);
 	void sendUserData(MessageType type, QueryOp op, QString* lpszUserId, QString* lpszAddress);
 	void sendAnnounce(void);
-	void prepareBroadcast(MessageType type, XmlMessage* pMessage);
+	void prepareBroadcast(MessageType type, XmlMessage* pMessage, bool includeMulticast = true);
 	void prepareMessage(MessageType type, qint64 msgId, bool retry, QString* lpszUserId, XmlMessage* pMessage);
 	void prepareFile(MessageType type, qint64 msgId, bool retry, QString* lpszUserId, XmlMessage* pMessage);
     void prepareFolder(MessageType type, qint64 msgId, bool retry, QString* lpszUserId, XmlMessage* pMessage);
