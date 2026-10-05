@@ -425,6 +425,9 @@ void MsgStream::init(void) {
 
 void MsgStream::init(QTcpSocket* socket) {
 	this->socket = socket;
+	// Incoming sockets were previously left parented to QTcpServer while the
+	// MsgStream itself had no owner. Give the stream sole lifetime ownership.
+	socket->setParent(this);
 	connect(socket, SIGNAL(disconnected()), this, SLOT(disconnected()));
 	connect(this->socket, SIGNAL(readyRead()), this, SLOT(readyRead()));
 	connect(socket, SIGNAL(bytesWritten(qint64)), this, SLOT(bytesWritten(qint64)));
