@@ -162,4 +162,14 @@ Assert-Contains 'lmc/src/messaging.cpp' `
   'pendingLegacyConnections.clear();' `
   'duplicate original-client announcements must collapse before connecting'
 
+Assert-Contains 'lmc/src/messaging.cpp' `
+  'pNetwork->addConnection(&userId, &address, false);' `
+  'original clients must bypass MBC-only id ordering'
+Assert-Contains 'lmc/src/messagingproc.cpp' `
+  'pNetwork->addConnection(&pHeader->userId, &pHeader->address, true);' `
+  'marked MBC peers must use single-stream negotiation'
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'if(singleStreamPeer && localId.compare(*lpszUserId, Qt::CaseSensitive) > 0)' `
+  'id ordering must apply only to marked MBC peers'
+
 Write-Host 'Source regression contracts passed.'
