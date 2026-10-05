@@ -47,7 +47,7 @@ public:
 	void stop(void);
 	void setLocalId(QString* lpszLocalId);
 	void setCrypto(lmcCrypto* pCrypto);
-	void sendBroadcast(QString* lpszData);
+	void sendBroadcast(QString* lpszData, bool includeMulticast = true);
 	void settingsChanged(void);
 	void setMulticastInterface(const QNetworkInterface& networkInterface);
 	void setIPAddress(const QString& szAddress, const QString& szSubnet);
