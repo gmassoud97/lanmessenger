@@ -259,10 +259,20 @@ FileReceiver::~FileReceiver(void) {
 }
 
 void FileReceiver::init(QTcpSocket* socket) {
+	if(!socket)
+		return;
+	if(this->socket) {
+		lmcTrace::write("Rejecting a second socket for file transfer " + id);
+		socket->disconnectFromHost();
+		return;
+	}
+
 	this->socket = socket;
+	// The receiver owns its accepted socket. This prevents the QTcpServer from
+	// retaining it and keeps the receiver/socket lifetime atomic.
+	socket->setParent(this);
 	connect(socket, SIGNAL(disconnected()), this, SLOT(disconnected()));
-	connect(socket, SIGNAL(disconnected()), socket, SLOT(deleteLater()));
-	connect(this->socket, SIGNAL(readyRead()), this, SLOT(readyRead()));
+	connect(socket, SIGNAL(readyRead()), this, SLOT(readyRead()));
 
 	receiveFile();
 	if(!active)
@@ -283,8 +293,19 @@ void FileReceiver::init(QTcpSocket* socket) {
 		if(timer)
 			timer->stop();
 		file->close();
+		socket->disconnectFromHost();
 		emit progressUpdated(FM_Receive, FO_Complete, type, &id, &peerId, &filePath);
+		return;
 	}
+
+	// The sender may coalesce the header and first payload bytes into one TCP
+	// packet. Process bytes already buffered before the readyRead connection.
+	if(socket->bytesAvailable() > 0)
+		readyRead();
+}
+
+bool FileReceiver::isInitialized(void) const {
+	return socket != NULL;
 }
 
 void FileReceiver::stop(void) {
