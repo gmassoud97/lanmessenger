@@ -95,6 +95,16 @@ void lmcUdpNetwork::sendBroadcast(QString* lpszData, bool includeMulticast) {
 	}
 }
 
+void lmcUdpNetwork::sendMulticast(QString* lpszData) {
+	if(!isRunning) {
+		lmcTrace::write("Warning: UDP server not running. Multicast not sent");
+		return;
+	}
+
+	QByteArray datagram = lpszData->toUtf8();
+	sendDatagram(multicastAddress, datagram);
+}
+
 void lmcUdpNetwork::settingsChanged(void) {
 	QHostAddress address = QHostAddress(pSettings->value(IDS_MULTICAST, IDS_MULTICAST_VAL).toString());
 	if(multicastAddress != address) {
