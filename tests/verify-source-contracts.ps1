@@ -185,6 +185,28 @@ Assert-Contains 'lmc/src/udpnetwork.cpp' `
   'for(int index = 0; index < broadcastList.count(); index++)' `
   'compatibility discovery must retain configured subnet broadcast addresses'
 
+# Incoming avatar/file sockets must have one owner and one attachment. This
+# avoids a race where a reconnect attaches a second socket to a receiver while
+# the first socket is completing or being destroyed.
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'if(receiver->isInitialized()) {' `
+  'duplicate incoming file sockets must be rejected'
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'receiver->init(socket);' `
+  'the validated file receiver must be initialized directly'
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'connect(socket, SIGNAL(disconnected()), socket, SLOT(deleteLater()));' `
+  'all rejected or malformed pending sockets must be released'
+Assert-Contains 'lmc/src/netstreamer.cpp' `
+  'socket->setParent(this);' `
+  'accepted file sockets must be owned by their receiver'
+Assert-Contains 'lmc/src/netstreamer.cpp' `
+  'if(this->socket) {' `
+  'a file receiver must reject a second socket'
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'Ignoring duplicate incoming file offer' `
+  'duplicate file offers must not create ambiguous receivers'
+
 # Logs must be directly accessible for crash diagnosis without asking users
 # to navigate hidden AppData folders manually.
 Assert-Contains 'lmc/src/mainwindow.cpp' `
