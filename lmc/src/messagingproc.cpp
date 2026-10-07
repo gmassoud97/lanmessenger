@@ -34,12 +34,24 @@ void lmcMessaging::sendBroadcast(MessageType type, XmlMessage* pMessage) {
 // ignore the extra XML field; updated clients use it to avoid simultaneous
 // connections while retaining compatibility with the original protocol.
 void lmcMessaging::sendAnnounce(void) {
+	if(!isConnected()) {
+		lmcTrace::write("Warning: Not connected. Announcement not sent");
+		return;
+	}
+	if(localUser->id.isNull()) {
+		lmcTrace::write("Warning: Local user not initialized. Announcement not sent");
+		return;
+	}
+
 	XmlMessage announce;
 	announce.addData(XN_VERSION, IDA_VERSION);
-	// Original clients may react separately to multicast and subnet broadcast,
-	// opening duplicate TCP streams before either handshake completes. Send MBC
-	// discovery through the configured broadcast-address path only.
-	prepareBroadcast(MT_Announce, &announce, false);
+	// Send exactly one discovery copy through multicast. The connected office
+	// subnets already carry multicast, while sending both multicast and the
+	// local subnet broadcast makes original clients open competing TCP streams.
+	lmcTrace::write("Sending multicast announcement");
+	QString szMessage = Message::addHeader(MT_Announce, msgId, &localUser->id, NULL, &announce);
+	pNetwork->sendMulticast(&szMessage);
+	lmcTrace::write("Multicast announcement sending done");
 }
 
 //	A message is to be sent
