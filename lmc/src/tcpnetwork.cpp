@@ -183,7 +183,14 @@ void lmcTcpNetwork::initReceiveFile(QString* lpszSenderId, QString* lpszAddress,
 	XmlMessage xmlMessage(*lpszData);
 	int type = Helper::indexOf(FileTypeNames, FT_Max, xmlMessage.data(XN_FILETYPE));
 
-	FileReceiver* receiver = new FileReceiver(xmlMessage.data(XN_FILEID), *lpszSenderId, xmlMessage.data(XN_FILEPATH), 
+	QString id = xmlMessage.data(XN_FILEID);
+	FileReceiver* existing = getReceiver(id, *lpszSenderId);
+	if(existing) {
+		lmcTrace::write("Ignoring duplicate incoming file offer " + id + " from user " + *lpszSenderId);
+		return;
+	}
+
+	FileReceiver* receiver = new FileReceiver(id, *lpszSenderId, xmlMessage.data(XN_FILEPATH), 
 		xmlMessage.data(XN_FILENAME), xmlMessage.data(XN_FILESIZE).toLongLong(), *lpszAddress, tcpPort, (FileType)type);
 	connect(receiver, SIGNAL(progressUpdated(FileMode, FileOp, FileType, QString*, QString*, QString*)),
 		this, SLOT(update(FileMode, FileOp, FileType, QString*, QString*, QString*)));
@@ -239,6 +246,9 @@ void lmcTcpNetwork::server_newConnection(void) {
 		lmcTrace::write("Warning: TCP server signaled a connection without a pending socket");
 		return;
 	}
+	// Every pending socket must eventually release itself, including malformed
+	// or duplicate connections that never get handed to a stream object.
+	connect(socket, SIGNAL(disconnected()), socket, SLOT(deleteLater()));
 	connect(socket, SIGNAL(readyRead()), this, SLOT(socket_readyRead()));
 	QTimer* headerTimer = new QTimer(socket);
 	headerTimer->setObjectName("lmcHeaderTimer");
@@ -314,6 +324,11 @@ void lmcTcpNetwork::processIncomingSocket(QTcpSocket* socket) {
 			socket->disconnectFromHost();
 			return;
 		}
+		if(receiver->isInitialized()) {
+			lmcTrace::write("Rejecting duplicate file connection " + id + " from user " + receiver->peerId);
+			socket->disconnectFromHost();
+			return;
+		}
 
 		QByteArray expectedHeader("FILE");
 		expectedHeader.append(id.toLocal8Bit());
@@ -327,8 +342,10 @@ void lmcTcpNetwork::processIncomingSocket(QTcpSocket* socket) {
 
 		disconnect(socket, SIGNAL(readyRead()), this, SLOT(socket_readyRead()));
 		socket->setProperty("lmcHeaderAccepted", true);
-		QString userId = receiver->peerId;
-		addFileSocket(&id, &userId, socket);
+		lmcTrace::write("Accepted file connection " + id + " from user " + receiver->peerId);
+		// Use the receiver we just validated. Re-looking it up after consuming the
+		// header leaves a race with completion/cancellation and duplicate sockets.
+		receiver->init(socket);
 	} else if(socket->bytesAvailable() >= 4) {
 		disconnect(socket, SIGNAL(readyRead()), this, SLOT(socket_readyRead()));
 		socket->disconnectFromHost();
