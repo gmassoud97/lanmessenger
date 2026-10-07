@@ -172,18 +172,22 @@ Assert-Contains 'lmc/src/tcpnetwork.cpp' `
   'if(singleStreamPeer && localId.compare(*lpszUserId, Qt::CaseSensitive) > 0)' `
   'id ordering must apply only to marked MBC peers'
 
-# Original clients can process the multicast and subnet-broadcast copies of
-# one announcement as separate connection requests. MBC announcements use the
-# configured broadcast addresses once; all other broadcasts remain unchanged.
+# Original clients can process multicast and subnet-broadcast copies of one
+# announcement as separate connection requests. MBC announcements therefore
+# use one multicast copy, preserving connected-subnet discovery without opening
+# duplicate TCP streams. Other broadcast types retain their normal delivery.
 Assert-Contains 'lmc/src/messagingproc.cpp' `
-  'prepareBroadcast(MT_Announce, &announce, false);' `
-  'MBC announcements must avoid duplicate multicast delivery to original clients'
+  'pNetwork->sendMulticast(&szMessage);' `
+  'MBC announcements must use one multicast discovery copy'
+Assert-Contains 'lmc/src/messagingproc.cpp' `
+  'Sending multicast announcement' `
+  'multicast-only announcements must be visible in diagnostic logs'
 Assert-Contains 'lmc/src/udpnetwork.cpp' `
-  'if(includeMulticast)' `
-  'UDP discovery must support broadcast-only compatibility mode'
+  'void lmcUdpNetwork::sendMulticast(QString* lpszData)' `
+  'UDP discovery must provide a multicast-only path'
 Assert-Contains 'lmc/src/udpnetwork.cpp' `
   'for(int index = 0; index < broadcastList.count(); index++)' `
-  'compatibility discovery must retain configured subnet broadcast addresses'
+  'other broadcasts must retain configured subnet broadcast addresses'
 
 # Incoming avatar/file sockets must have one owner and one attachment. This
 # avoids a race where a reconnect attaches a second socket to a receiver while
