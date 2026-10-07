@@ -95,6 +95,7 @@ public:
 
 	void init(QTcpSocket* socket);
 	void stop(void);
+	bool isInitialized(void) const;
 	
 	QString id;
     QString peerId;

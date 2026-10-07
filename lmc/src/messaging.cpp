@@ -47,6 +47,7 @@ lmcMessaging::lmcMessaging(void) {
 	userGroupMap.clear();
 	receivedList.clear();
 	pendingList.clear();
+	pendingLegacyConnections.clear();
     fileList.clear();
     folderList.clear();
 	loopback = false;
@@ -98,12 +99,12 @@ void lmcMessaging::start(void) {
 	pNetwork->start();
 
 	sendBroadcast(MT_Depart, NULL);
-	sendBroadcast(MT_Announce, NULL);
+	sendAnnounce();
 }
 
 void lmcMessaging::update(void) {
 	lmcTrace::write("Refreshing contacts list...");
-	sendBroadcast(MT_Announce, NULL);
+	sendAnnounce();
 
 	for(int index = 0; index < userList.count(); index++)
 		sendMessage(MT_Ping, &userList[index].id, NULL);
@@ -252,6 +253,23 @@ void lmcMessaging::network_connectionStateChanged(void) {
 void lmcMessaging::timer_timeout(void) {
 	//	check if any pending message has timed out
 	checkPendingMsg();
+
+	// Original LAN Messenger announcements do not identify connection
+	// capabilities. Delay their outgoing connection by one timer tick so an
+	// original peer that already saw our announcement can connect first.
+	// Duplicate UDP announcements collapse into one map entry.
+	QMap<QString, QString> connections = pendingLegacyConnections;
+	pendingLegacyConnections.clear();
+	QMap<QString, QString>::const_iterator index = connections.constBegin();
+	while(index != connections.constEnd()) {
+		QString userId = index.key();
+		QString address = index.value();
+		if(!getUser(&userId))
+			// Original and older MBC peers use the original protocol: the
+			// announcement receiver initiates regardless of id ordering.
+			pNetwork->addConnection(&userId, &address, false);
+		index++;
+	}
 }
 
 QString lmcMessaging::createUserId(QString* lpszAddress, QString* lpszUserName) {

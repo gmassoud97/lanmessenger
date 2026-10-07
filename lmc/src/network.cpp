@@ -49,6 +49,7 @@ lmcNetwork::lmcNetwork(void) {
     interfaceName = QString::null;
 	isConnected = false;
 	canReceive = false;
+	listenerRetryCountdown = 0;
 }
 
 lmcNetwork::~lmcNetwork(void) {
@@ -120,12 +121,16 @@ void lmcNetwork::setLocalId(QString* lpszLocalId) {
 	pTcpNetwork->setLocalId(lpszLocalId);
 }
 
-void lmcNetwork::sendBroadcast(QString* lpszData) {
-	pUdpNetwork->sendBroadcast(lpszData);
+void lmcNetwork::sendBroadcast(QString* lpszData, bool includeMulticast) {
+	pUdpNetwork->sendBroadcast(lpszData, includeMulticast);
 }
 
-void lmcNetwork::addConnection(QString* lpszUserId, QString* lpszAddress) {
-	pTcpNetwork->addConnection(lpszUserId, lpszAddress);
+void lmcNetwork::sendMulticast(QString* lpszData) {
+	pUdpNetwork->sendMulticast(lpszData);
+}
+
+void lmcNetwork::addConnection(QString* lpszUserId, QString* lpszAddress, bool singleStreamPeer) {
+	pTcpNetwork->addConnection(lpszUserId, lpszAddress, singleStreamPeer);
 }
 
 void lmcNetwork::sendMessage(QString* lpszReceiverId, QString* lpszAddress, QString* lpszData) {
@@ -156,11 +161,11 @@ void lmcNetwork::settingsChanged(void) {
 
 void lmcNetwork::timer_timeout(void) {
 	bool prev = isConnected;
-    isConnected = getIPAddress(false);
+	isConnected = getIPAddress(false);
 
 	if(prev != isConnected) {
-        lmcTrace::write("Network interface selected: " + (networkInterface.isValid() ? networkInterface.humanReadableName() : "None") +
-            "\nIP address obtained: " + (ipAddress.isEmpty() ? "NULL" : ipAddress) +
+		lmcTrace::write("Network interface selected: " + (networkInterface.isValid() ? networkInterface.humanReadableName() : "None") +
+			"\nIP address obtained: " + (ipAddress.isEmpty() ? "NULL" : ipAddress) +
 			"\nSubnet mask obtained: " + (subnetMask.isEmpty() ? "NULL" : subnetMask) +
 			"\nConnection status: " + (isConnected ? "OK" : "Fail"));
 
@@ -171,11 +176,43 @@ void lmcNetwork::timer_timeout(void) {
 			pTcpNetwork->setIPAddress(ipAddress);
 			pTcpNetwork->start();
 			canReceive = pUdpNetwork->canReceive;
+			// Give Windows a few seconds to finish restoring its network stack
+			// before the first retry. Later failures use a ten-second backoff.
+			listenerRetryCountdown = canReceive ? 0 : 1;
 		} else {
 			pUdpNetwork->stop();
 			pTcpNetwork->stop();
+			canReceive = false;
+			listenerRetryCountdown = 0;
 		}
-        emit connectionStateChanged();
+		emit connectionStateChanged();
+		return;
+	}
+
+	// Locking, sleep and Modern Standby can temporarily remove the network
+	// adapter. A bind attempted immediately after resume can fail even though
+	// the port is not permanently occupied. Keep the application alive and
+	// retry only the UDP listener instead of treating one failure as fatal.
+	if(isConnected && !canReceive) {
+		if(listenerRetryCountdown > 0) {
+			listenerRetryCountdown--;
+			return;
+		}
+
+		lmcTrace::write("Retrying UDP listener after network resume");
+		pUdpNetwork->stop();
+		pUdpNetwork->setMulticastInterface(networkInterface);
+		pUdpNetwork->setIPAddress(ipAddress, subnetMask);
+		pUdpNetwork->start();
+		canReceive = pUdpNetwork->canReceive;
+		listenerRetryCountdown = canReceive ? 0 : 4;
+
+		if(canReceive) {
+			lmcTrace::write("UDP listener restored after network resume");
+			emit connectionStateChanged();
+		} else {
+			lmcTrace::write("UDP listener is still unavailable; the application will remain open and retry");
+		}
 	}
 }
 

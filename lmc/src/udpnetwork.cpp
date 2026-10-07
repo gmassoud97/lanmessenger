@@ -81,17 +81,28 @@ void lmcUdpNetwork::setCrypto(lmcCrypto* pCrypto) {
 	this->pCrypto = pCrypto;
 }
 
-void lmcUdpNetwork::sendBroadcast(QString* lpszData) {
+void lmcUdpNetwork::sendBroadcast(QString* lpszData, bool includeMulticast) {
     if(!isRunning) {
         lmcTrace::write("Warning: UDP server not running. Broadcast not sent");
         return;
     }
 
 	QByteArray datagram = lpszData->toUtf8();
-	sendDatagram(multicastAddress, datagram);
+	if(includeMulticast)
+		sendDatagram(multicastAddress, datagram);
 	for(int index = 0; index < broadcastList.count(); index++) {
 		sendDatagram(broadcastList.at(index), datagram);
 	}
+}
+
+void lmcUdpNetwork::sendMulticast(QString* lpszData) {
+	if(!isRunning) {
+		lmcTrace::write("Warning: UDP server not running. Multicast not sent");
+		return;
+	}
+
+	QByteArray datagram = lpszData->toUtf8();
+	sendDatagram(multicastAddress, datagram);
 }
 
 void lmcUdpNetwork::settingsChanged(void) {

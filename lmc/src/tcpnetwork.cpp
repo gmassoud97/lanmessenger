@@ -60,15 +60,21 @@ void lmcTcpNetwork::stop(void) {
 		receiver->stop();
 		receiver->deleteLater();
 	}
-	// Close all open sockets
-	if(locMsgStream)
-		locMsgStream->stop();
-	QMap<QString, MsgStream*>::const_iterator index = messageMap.constBegin();
-	while(index != messageMap.constEnd()) {
-		MsgStream* pMsgStream = index.value();
-		if(pMsgStream)
-			pMsgStream->stop();
-		index++;
+	// Close and release all open message streams. Streams are not parented to
+	// this object, so merely closing their sockets leaks them across reconnects.
+	if(locMsgStream) {
+		MsgStream* stream = locMsgStream;
+		locMsgStream = NULL;
+		stream->stop();
+		stream->deleteLater();
+	}
+	QList<MsgStream*> streams = messageMap.values();
+	messageMap.clear();
+	for(int index = 0; index < streams.count(); index++) {
+		if(streams[index]) {
+			streams[index]->stop();
+			streams[index]->deleteLater();
+		}
 	}
 	isRunning = false;
 }
@@ -81,11 +87,31 @@ void lmcTcpNetwork::setCrypto(lmcCrypto* pCrypto) {
 	crypto = pCrypto;
 }
 
-void lmcTcpNetwork::addConnection(QString* lpszUserId, QString* lpszAddress) {
+void lmcTcpNetwork::addConnection(QString* lpszUserId, QString* lpszAddress, bool singleStreamPeer) {
     if(!isRunning) {
         lmcTrace::write("Warning: TCP server not running. Unable to connect");
         return;
     }
+
+	bool localConnection = (lpszUserId->compare(localId) == 0);
+	if(localConnection) {
+		if(locMsgStream) {
+			lmcTrace::write("Ignoring duplicate local TCP connection");
+			return;
+		}
+	} else {
+		if(messageMap.contains(*lpszUserId)) {
+			lmcTrace::write("Ignoring duplicate TCP connection request for user " + *lpszUserId);
+			return;
+		}
+		// When both peers see the same announcement, only the peer with the
+		// lexicographically smaller id initiates. This prevents two competing
+		// streams and two encryption handshakes for the same contact.
+		if(singleStreamPeer && localId.compare(*lpszUserId, Qt::CaseSensitive) > 0) {
+			lmcTrace::write("Waiting for canonical incoming TCP connection from user " + *lpszUserId);
+			return;
+		}
+	}
 
 	lmcTrace::write("Connecting to user " + *lpszUserId + " at " + *lpszAddress);
 
@@ -157,7 +183,14 @@ void lmcTcpNetwork::initReceiveFile(QString* lpszSenderId, QString* lpszAddress,
 	XmlMessage xmlMessage(*lpszData);
 	int type = Helper::indexOf(FileTypeNames, FT_Max, xmlMessage.data(XN_FILETYPE));
 
-	FileReceiver* receiver = new FileReceiver(xmlMessage.data(XN_FILEID), *lpszSenderId, xmlMessage.data(XN_FILEPATH), 
+	QString id = xmlMessage.data(XN_FILEID);
+	FileReceiver* existing = getReceiver(id, *lpszSenderId);
+	if(existing) {
+		lmcTrace::write("Ignoring duplicate incoming file offer " + id + " from user " + *lpszSenderId);
+		return;
+	}
+
+	FileReceiver* receiver = new FileReceiver(id, *lpszSenderId, xmlMessage.data(XN_FILEPATH), 
 		xmlMessage.data(XN_FILENAME), xmlMessage.data(XN_FILESIZE).toLongLong(), *lpszAddress, tcpPort, (FileType)type);
 	connect(receiver, SIGNAL(progressUpdated(FileMode, FileOp, FileType, QString*, QString*, QString*)),
 		this, SLOT(update(FileMode, FileOp, FileType, QString*, QString*, QString*)));
@@ -209,6 +242,13 @@ void lmcTcpNetwork::setIPAddress(const QString& szAddress) {
 void lmcTcpNetwork::server_newConnection(void) {
 	lmcTrace::write("New connection received");
 	QTcpSocket* socket = server->nextPendingConnection();
+	if(!socket) {
+		lmcTrace::write("Warning: TCP server signaled a connection without a pending socket");
+		return;
+	}
+	// Every pending socket must eventually release itself, including malformed
+	// or duplicate connections that never get handed to a stream object.
+	connect(socket, SIGNAL(disconnected()), socket, SLOT(deleteLater()));
 	connect(socket, SIGNAL(readyRead()), this, SLOT(socket_readyRead()));
 	QTimer* headerTimer = new QTimer(socket);
 	headerTimer->setObjectName("lmcHeaderTimer");
@@ -284,6 +324,11 @@ void lmcTcpNetwork::processIncomingSocket(QTcpSocket* socket) {
 			socket->disconnectFromHost();
 			return;
 		}
+		if(receiver->isInitialized()) {
+			lmcTrace::write("Rejecting duplicate file connection " + id + " from user " + receiver->peerId);
+			socket->disconnectFromHost();
+			return;
+		}
 
 		QByteArray expectedHeader("FILE");
 		expectedHeader.append(id.toLocal8Bit());
@@ -297,8 +342,10 @@ void lmcTcpNetwork::processIncomingSocket(QTcpSocket* socket) {
 
 		disconnect(socket, SIGNAL(readyRead()), this, SLOT(socket_readyRead()));
 		socket->setProperty("lmcHeaderAccepted", true);
-		QString userId = receiver->peerId;
-		addFileSocket(&id, &userId, socket);
+		lmcTrace::write("Accepted file connection " + id + " from user " + receiver->peerId);
+		// Use the receiver we just validated. Re-looking it up after consuming the
+		// header leaves a race with completion/cancellation and duplicate sockets.
+		receiver->init(socket);
 	} else if(socket->bytesAvailable() >= 4) {
 		disconnect(socket, SIGNAL(readyRead()), this, SLOT(socket_readyRead()));
 		socket->disconnectFromHost();
@@ -329,7 +376,24 @@ void lmcTcpNetwork::socket_headerTimeout(void) {
 }
 
 void lmcTcpNetwork::msgStream_connectionLost(QString* lpszUserId) {
-	emit connectionLost(lpszUserId);
+	MsgStream* stream = qobject_cast<MsgStream*>(sender());
+	bool currentStream = false;
+
+	if(stream && stream == locMsgStream) {
+		locMsgStream = NULL;
+		currentStream = true;
+	} else if(stream && messageMap.value(*lpszUserId, NULL) == stream) {
+		messageMap.remove(*lpszUserId);
+		currentStream = true;
+	}
+
+	if(stream)
+		stream->deleteLater();
+
+	// A stale/duplicate stream must not remove a contact whose current stream
+	// is still alive.
+	if(currentStream)
+		emit connectionLost(lpszUserId);
 }
 
 void lmcTcpNetwork::update(FileMode mode, FileOp op, FileType type, QString* lpszId, QString* lpszUserId, QString* lpszData) {
@@ -410,6 +474,18 @@ void lmcTcpNetwork::addFileSocket(QString* lpszId, QString* lpszUserId, QTcpSock
 }
 
 void lmcTcpNetwork::addMsgSocket(QString* lpszUserId, QTcpSocket* pSocket) {
+	if(!pSocket)
+		return;
+
+	bool localConnection = (lpszUserId->compare(localId) == 0);
+	MsgStream* existing = localConnection ? locMsgStream : messageMap.value(*lpszUserId, NULL);
+	if(existing) {
+		lmcTrace::write("Rejecting duplicate incoming TCP connection from user " + *lpszUserId);
+		pSocket->disconnectFromHost();
+		pSocket->deleteLater();
+		return;
+	}
+
 	lmcTrace::write("Accepted connection from user " + *lpszUserId);
 	QString address = pSocket->peerAddress().toString();
 	MsgStream* msgStream = new MsgStream(localId, *lpszUserId, address, tcpPort);
@@ -417,7 +493,10 @@ void lmcTcpNetwork::addMsgSocket(QString* lpszUserId, QTcpSocket* pSocket) {
 		this, SLOT(msgStream_connectionLost(QString*)));
 	connect(msgStream, SIGNAL(messageReceived(QString*, QString*, QByteArray&)),
 		this, SLOT(receiveMessage(QString*, QString*, QByteArray&)));
-	messageMap.insert(*lpszUserId, msgStream);
+	if(localConnection)
+		locMsgStream = msgStream;
+	else
+		messageMap.insert(*lpszUserId, msgStream);
 	msgStream->init(pSocket);
 
 	sendPublicKey(lpszUserId);

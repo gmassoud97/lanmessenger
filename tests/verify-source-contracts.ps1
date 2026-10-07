@@ -101,4 +101,126 @@ Assert-Contains 'lmc/src/resources/themes/Ping Pong/Outgoing/Content.html' `
   "<td width='38' valign='top'><img" `
   'Ping Pong outgoing messages must retain left-side avatars'
 
+
+# A transient listener failure after Windows lock, sleep or resume must not
+# terminate the application. The network layer retries with a backoff.
+Assert-Contains 'lmc/src/network.cpp' `
+  'if(isConnected && !canReceive) {' `
+  'network listener failures must enter the retry path'
+Assert-Contains 'lmc/src/network.cpp' `
+  'listenerRetryCountdown = canReceive ? 0 : 4;' `
+  'repeated listener retries must use a backoff'
+Assert-Contains 'lmc/src/lmc.cpp' `
+  'keeping the application open while retrying' `
+  'transient listener failures must keep the application alive'
+
+$coreSource = Get-Content -Raw -Path (Join-Path $root 'lmc/src/lmc.cpp')
+$coreStart = $coreSource.IndexOf('void lmcCore::connectionStateChanged(void)')
+$coreEnd = $coreSource.IndexOf("`n}", $coreStart)
+if ($coreStart -lt 0 -or $coreEnd -lt $coreStart) {
+  throw 'Regression check failed: connectionStateChanged function was not found'
+}
+$coreFunction = $coreSource.Substring($coreStart, $coreEnd - $coreStart)
+if ($coreFunction.Contains('exitApp();')) {
+  throw 'Regression check failed: network reconnect handling must not exit the application'
+}
+
+# Each peer must have one owned message stream. Duplicate connection storms
+# previously overwrote QMap pointers, leaked streams and replaced crypto state.
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'Ignoring duplicate TCP connection request for user' `
+  'duplicate outgoing message streams must be suppressed'
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'Waiting for canonical incoming TCP connection from user' `
+  'simultaneous peer connects must have deterministic ownership'
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'messageMap.remove(*lpszUserId);' `
+  'disconnected message streams must be removed from the active map'
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'stream->deleteLater();' `
+  'disconnected message streams must be released'
+Assert-Contains 'lmc/src/netstreamer.cpp' `
+  'socket->setParent(this);' `
+  'accepted message sockets must be owned by their stream'
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'if(!socket) {' `
+  'newConnection handling must guard a missing pending socket'
+
+# Announcements from this branch carry a marker that original clients ignore.
+# Untagged original-client announcements are delayed and deduplicated, keeping
+# mixed-version networks compatible without simultaneous connection races.
+Assert-Contains 'lmc/src/messagingproc.cpp' `
+  'announce.addData(XN_VERSION, IDA_VERSION);' `
+  'MBC announcements must identify single-stream support'
+Assert-Contains 'lmc/src/messagingproc.cpp' `
+  'pendingLegacyConnections.insert(pHeader->userId, pHeader->address);' `
+  'original-client announcements must be delayed and deduplicated'
+Assert-Contains 'lmc/src/messaging.cpp' `
+  'QMap<QString, QString> connections = pendingLegacyConnections;' `
+  'delayed original-client connections must be processed'
+Assert-Contains 'lmc/src/messaging.cpp' `
+  'pendingLegacyConnections.clear();' `
+  'duplicate original-client announcements must collapse before connecting'
+
+Assert-Contains 'lmc/src/messaging.cpp' `
+  'pNetwork->addConnection(&userId, &address, false);' `
+  'original clients must bypass MBC-only id ordering'
+Assert-Contains 'lmc/src/messagingproc.cpp' `
+  'pNetwork->addConnection(&pHeader->userId, &pHeader->address, true);' `
+  'marked MBC peers must use single-stream negotiation'
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'if(singleStreamPeer && localId.compare(*lpszUserId, Qt::CaseSensitive) > 0)' `
+  'id ordering must apply only to marked MBC peers'
+
+# Original clients can process multicast and subnet-broadcast copies of one
+# announcement as separate connection requests. MBC announcements therefore
+# use one multicast copy, preserving connected-subnet discovery without opening
+# duplicate TCP streams. Other broadcast types retain their normal delivery.
+Assert-Contains 'lmc/src/messagingproc.cpp' `
+  'pNetwork->sendMulticast(&szMessage);' `
+  'MBC announcements must use one multicast discovery copy'
+Assert-Contains 'lmc/src/messagingproc.cpp' `
+  'Sending multicast announcement' `
+  'multicast-only announcements must be visible in diagnostic logs'
+Assert-Contains 'lmc/src/udpnetwork.cpp' `
+  'void lmcUdpNetwork::sendMulticast(QString* lpszData)' `
+  'UDP discovery must provide a multicast-only path'
+Assert-Contains 'lmc/src/udpnetwork.cpp' `
+  'for(int index = 0; index < broadcastList.count(); index++)' `
+  'other broadcasts must retain configured subnet broadcast addresses'
+
+# Incoming avatar/file sockets must have one owner and one attachment. This
+# avoids a race where a reconnect attaches a second socket to a receiver while
+# the first socket is completing or being destroyed.
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'if(receiver->isInitialized()) {' `
+  'duplicate incoming file sockets must be rejected'
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'receiver->init(socket);' `
+  'the validated file receiver must be initialized directly'
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'connect(socket, SIGNAL(disconnected()), socket, SLOT(deleteLater()));' `
+  'all rejected or malformed pending sockets must be released'
+Assert-Contains 'lmc/src/netstreamer.cpp' `
+  'socket->setParent(this);' `
+  'accepted file sockets must be owned by their receiver'
+Assert-Contains 'lmc/src/netstreamer.cpp' `
+  'if(this->socket) {' `
+  'a file receiver must reject a second socket'
+Assert-Contains 'lmc/src/tcpnetwork.cpp' `
+  'Ignoring duplicate incoming file offer' `
+  'duplicate file offers must not create ambiguous receivers'
+
+# Logs must be directly accessible for crash diagnosis without asking users
+# to navigate hidden AppData folders manually.
+Assert-Contains 'lmc/src/mainwindow.cpp' `
+  'openLogsAction = pToolsMenu->addAction("Open &Logs Folder"' `
+  'Tools menu must expose the logs folder'
+Assert-Contains 'lmc/src/mainwindow.cpp' `
+  'QDesktopServices::openUrl(QUrl::fromLocalFile(logDir.absolutePath()));' `
+  'logs action must open the actual local logs directory'
+Assert-Contains 'lmc/src/mainwindow.cpp' `
+  'logDir.mkpath(".");' `
+  'logs action must create the folder if it does not exist'
+
 Write-Host 'Source regression contracts passed.'

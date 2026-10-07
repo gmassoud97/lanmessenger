@@ -48,8 +48,9 @@ public:
 	void stop(void);
 	QString physicalAddress(void);
 	void setLocalId(QString* lpszLocalId);
-	void sendBroadcast(QString* lpszData);
-	void addConnection(QString* lpszUserId, QString* lpszAddress);
+	void sendBroadcast(QString* lpszData, bool includeMulticast = true);
+	void sendMulticast(QString* lpszData);
+	void addConnection(QString* lpszUserId, QString* lpszAddress, bool singleStreamPeer = false);
 	void sendMessage(QString* lpszReceiverId, QString* lpszAddress, QString* lpszData);
 	void initSendFile(QString* lpszReceiverId, QString* lpszAddress, QString* lpszData);
 	void initReceiveFile(QString* lpszSenderId, QString* lpszAddress, QString* lpszData);
@@ -100,6 +101,7 @@ private:
 	lmcWebNetwork*			pWebNetwork;
 	lmcCrypto*				pCrypto;
 	QTimer*					pTimer;
+	int						listenerRetryCountdown;
     QString					interfaceName;
 	QNetworkInterface		networkInterface;
 };
