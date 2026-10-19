@@ -199,11 +199,17 @@ Assert-Contains 'lmc/src/tcpnetwork.cpp' `
   'receiver->init(socket);' `
   'the validated file receiver must be initialized directly'
 Assert-Contains 'lmc/src/tcpnetwork.cpp' `
-  'connect(socket, SIGNAL(disconnected()), socket, SLOT(deleteLater()));' `
-  'all rejected or malformed pending sockets must be released'
+  'if(socket && !socket->property("lmcHeaderAccepted").toBool())' `
+  'only unaccepted pending sockets may delete themselves on disconnect'
 Assert-Contains 'lmc/src/netstreamer.cpp' `
   'socket->setParent(this);' `
   'accepted file sockets must be owned by their receiver'
+Assert-Contains 'lmc/src/netstreamer.cpp' `
+  'QTimer::singleShot(0, this, SLOT(readyRead()));' `
+  'buffered file payload must be processed after receiver initialization returns'
+Assert-Contains 'lmc/src/netstreamer.cpp' `
+  'stop();' `
+  'disconnected file receivers must stop before emitting terminal progress'
 Assert-Contains 'lmc/src/netstreamer.cpp' `
   'if(this->socket) {' `
   'a file receiver must reject a second socket'

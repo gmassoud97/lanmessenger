@@ -246,9 +246,10 @@ void lmcTcpNetwork::server_newConnection(void) {
 		lmcTrace::write("Warning: TCP server signaled a connection without a pending socket");
 		return;
 	}
-	// Every pending socket must eventually release itself, including malformed
-	// or duplicate connections that never get handed to a stream object.
-	connect(socket, SIGNAL(disconnected()), socket, SLOT(deleteLater()));
+	// Before a socket is accepted by a message stream or file receiver, the
+	// TCP network object is responsible for releasing it. Accepted sockets are
+	// instead deleted with their owning stream/receiver.
+	connect(socket, SIGNAL(disconnected()), this, SLOT(socket_disconnected()));
 	connect(socket, SIGNAL(readyRead()), this, SLOT(socket_readyRead()));
 	QTimer* headerTimer = new QTimer(socket);
 	headerTimer->setObjectName("lmcHeaderTimer");
@@ -259,6 +260,12 @@ void lmcTcpNetwork::server_newConnection(void) {
 void lmcTcpNetwork::socket_readyRead(void) {
 	QTcpSocket* socket = (QTcpSocket*)sender();
 	processIncomingSocket(socket);
+}
+
+void lmcTcpNetwork::socket_disconnected(void) {
+	QTcpSocket* socket = qobject_cast<QTcpSocket*>(sender());
+	if(socket && !socket->property("lmcHeaderAccepted").toBool())
+		socket->deleteLater();
 }
 
 void lmcTcpNetwork::processIncomingSocket(QTcpSocket* socket) {

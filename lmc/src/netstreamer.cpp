@@ -268,15 +268,19 @@ void FileReceiver::init(QTcpSocket* socket) {
 	}
 
 	this->socket = socket;
-	// The receiver owns its accepted socket. This prevents the QTcpServer from
-	// retaining it and keeps the receiver/socket lifetime atomic.
+	// The receiver is the sole owner of an accepted socket. Do not also schedule
+	// the socket for independent deletion on disconnect: queued receiver work
+	// must never observe a dangling socket pointer.
 	socket->setParent(this);
 	connect(socket, SIGNAL(disconnected()), this, SLOT(disconnected()));
 	connect(socket, SIGNAL(readyRead()), this, SLOT(readyRead()));
 
+	lmcTrace::write("Initializing file receiver " + id + " from user " + peerId +
+		", Size: " + QString::number(fileSize));
 	receiveFile();
 	if(!active)
 		return;
+	lmcTrace::write("File receiver destination opened for " + id);
 	//	now send a START message to sender
 	if(socket->write("START") != 5) {
 		QString data;
@@ -298,10 +302,13 @@ void FileReceiver::init(QTcpSocket* socket) {
 		return;
 	}
 
+	lmcTrace::write("File receiver START sent for " + id);
+
 	// The sender may coalesce the header and first payload bytes into one TCP
-	// packet. Process bytes already buffered before the readyRead connection.
+	// packet. Queue processing so completion cannot delete receiver state while
+	// the TCP header handler and init() are still on the stack.
 	if(socket->bytesAvailable() > 0)
-		readyRead();
+		QTimer::singleShot(0, this, SLOT(readyRead()));
 }
 
 bool FileReceiver::isInitialized(void) const {
@@ -329,6 +336,9 @@ void FileReceiver::stop(void) {
 void FileReceiver::disconnected(void) {
 	if(active) {
 		QString data;
+		// Stop first so queued readyRead/timer work becomes a no-op and the
+		// partial destination is closed before upper layers release the receiver.
+		stop();
 		emit progressUpdated(FM_Receive, FO_Error, type, &id, &peerId, &data);
 	}
 }
@@ -348,6 +358,7 @@ void FileReceiver::readyRead(void) {
 		}
 
 		if(fileSize - file->pos() <= 0) {
+			lmcTrace::write("File receiver completed " + id + " from user " + peerId);
 			active = false;
 			if(timer)
 				timer->stop();
