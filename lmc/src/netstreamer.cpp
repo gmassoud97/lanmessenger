@@ -297,8 +297,8 @@ void FileReceiver::init(QTcpSocket* socket) {
 		if(timer)
 			timer->stop();
 		file->close();
-		socket->disconnectFromHost();
-		emit progressUpdated(FM_Receive, FO_Complete, type, &id, &peerId, &filePath);
+		lmcTrace::write("File receiver completion queued " + id + " from user " + peerId);
+		QTimer::singleShot(0, this, SLOT(complete()));
 		return;
 	}
 
@@ -358,13 +358,16 @@ void FileReceiver::readyRead(void) {
 		}
 
 		if(fileSize - file->pos() <= 0) {
-			lmcTrace::write("File receiver completed " + id + " from user " + peerId);
 			active = false;
 			if(timer)
 				timer->stop();
 			file->close();
-			socket->disconnectFromHost();
-			emit progressUpdated(FM_Receive, FO_Complete, type, &id, &peerId, &filePath);
+			disconnect(socket, SIGNAL(readyRead()), this, SLOT(readyRead()));
+			lmcTrace::write("File receiver completion queued " + id + " from user " + peerId);
+			// Leave QTcpSocket::readyRead before disconnecting the socket or
+			// notifying UI layers. Avatar completion can replace an image and
+			// repaint several windows, which must not re-enter socket teardown.
+			QTimer::singleShot(0, this, SLOT(complete()));
 			return;
 		}
 	}
@@ -374,6 +377,16 @@ void FileReceiver::readyRead(void) {
 //		emit progressUpdated(FM_Receive, FO_Progress, type, &id, &peerId, &transferred);
 //		milestone += mile;
 //	}
+}
+
+void FileReceiver::complete(void) {
+	lmcTrace::write("Finalizing file receiver " + id + " from user " + peerId);
+	if(socket && socket->state() != QAbstractSocket::UnconnectedState)
+		socket->disconnectFromHost();
+
+	lmcTrace::write("Dispatching file receiver completion " + id + " from user " + peerId);
+	emit progressUpdated(FM_Receive, FO_Complete, type, &id, &peerId, &filePath);
+	lmcTrace::write("File receiver completion dispatched " + id + " from user " + peerId);
 }
 
 void FileReceiver::timer_timeout(void) {

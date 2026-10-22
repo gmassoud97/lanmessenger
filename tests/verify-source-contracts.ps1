@@ -208,6 +208,12 @@ Assert-Contains 'lmc/src/netstreamer.cpp' `
   'QTimer::singleShot(0, this, SLOT(readyRead()));' `
   'buffered file payload must be processed after receiver initialization returns'
 Assert-Contains 'lmc/src/netstreamer.cpp' `
+  'QTimer::singleShot(0, this, SLOT(complete()));' `
+  'file completion must leave the socket readyRead callback before UI notification'
+Assert-Contains 'lmc/src/netstreamer.cpp' `
+  'Dispatching file receiver completion' `
+  'queued file completion must expose its final dispatch stage in crash logs'
+Assert-Contains 'lmc/src/netstreamer.cpp' `
   'stop();' `
   'disconnected file receivers must stop before emitting terminal progress'
 Assert-Contains 'lmc/src/netstreamer.cpp' `

@@ -107,6 +107,7 @@ signals:
 private slots:
 	void disconnected(void);
 	void readyRead(void);
+	void complete(void);
 	void timer_timeout(void);
 
 private:
