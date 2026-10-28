@@ -32,6 +32,8 @@ lmcCore::lmcCore(void) {
 	connect(pMessaging, SIGNAL(messageReceived(MessageType, QString*, XmlMessage*)), 
 		this, SLOT(receiveMessage(MessageType, QString*, XmlMessage*)));
 	connect(pMessaging, SIGNAL(connectionStateChanged()), this, SLOT(connectionStateChanged()));
+	connect(qApp, SIGNAL(applicationStateChanged(Qt::ApplicationState)),
+		this, SLOT(applicationStateChanged(Qt::ApplicationState)));
 	pMainWindow = new lmcMainWindow();
 	connect(pMainWindow, SIGNAL(appExiting()), this, SLOT(exitApp()));
 	connect(pMainWindow, SIGNAL(chatStarting(QString*)), this, SLOT(startChat(QString*)));
@@ -269,6 +271,14 @@ void lmcCore::aboutToExit(void) {
 }
 
 void lmcCore::timer_timeout(void) {
+	// Windows lock and Modern Standby leave the process running while the
+	// desktop and network are unavailable. Avoid a reconnect/avatar burst until
+	// the interactive session is active again.
+	if(qApp->applicationState() != Qt::ApplicationActive) {
+		lmcTrace::write("Contact refresh deferred while application is inactive");
+		return;
+	}
+
 	//	Refresh the contacts list whenever the timer triggers
 	pMessaging->update();
 	if(adaptiveRefresh) {
@@ -389,6 +399,26 @@ bool lmcCore::receiveAppMessage(const QString& szMessage) {
 	return doNotExit;
 }
 
+void lmcCore::applicationStateChanged(Qt::ApplicationState state) {
+	if(state != Qt::ApplicationActive)
+		return;
+
+	lmcTrace::write("Application active; refreshing contacts and deferred avatars");
+	pMessaging->update();
+
+	QSet<QString> users = deferredAvatarUsers;
+	deferredAvatarUsers.clear();
+	foreach(QString userId, users) {
+		User* user = pMessaging->getUser(&userId);
+		if(!user || user->avatarPath.isEmpty())
+			continue;
+
+		XmlMessage avatarMessage;
+		avatarMessage.addData(XN_FILEPATH, user->avatarPath);
+		processMessage(MT_Avatar, &userId, &avatarMessage);
+	}
+}
+
 void lmcCore::connectionStateChanged(void) {
 	bool connected = pMessaging->isConnected();
 
@@ -403,8 +433,9 @@ void lmcCore::connectionStateChanged(void) {
 		pBroadcastWindow->connectionStateChanged(connected);
 
 	if(pMessaging->isConnected() && !pMessaging->canReceive()) {
-		showPortConflictMessage();
-		exitApp();
+		// A listener can fail briefly while Windows restores the network after
+		// lock, sleep or Modern Standby. The network layer will retry it.
+		lmcTrace::write("Network listener temporarily unavailable; keeping the application open while retrying");
 	}
 }
 
@@ -565,10 +596,21 @@ void lmcCore::processMessage(MessageType type, QString* lpszUserId, XmlMessage* 
 		routeGroupMessage(type, lpszUserId, pMessage);
 		break;
 	case MT_Avatar:
+		if(lpszUserId && qApp->applicationState() != Qt::ApplicationActive) {
+			deferredAvatarUsers.insert(*lpszUserId);
+			lmcTrace::write("Avatar UI refresh deferred while application is inactive for user " + *lpszUserId);
+			break;
+		}
+		lmcTrace::write("Refreshing avatar UI for user " +
+			(lpszUserId ? *lpszUserId : pMessaging->localUser->id));
         pMainWindow->receiveMessage(type, lpszUserId, pMessage);
+		lmcTrace::write("Main window avatar refreshed");
         processPublicMessage(type, lpszUserId, pMessage);
+		lmcTrace::write("Public chat avatar refreshed");
         routeMessage(type, lpszUserId, pMessage);
+		lmcTrace::write("Conversation avatar refreshed");
         routeGroupMessage(type, lpszUserId, pMessage);
+		lmcTrace::write("Avatar UI refresh completed");
 		break;
 	case MT_Message:
 		routeMessage(type, lpszUserId, pMessage);

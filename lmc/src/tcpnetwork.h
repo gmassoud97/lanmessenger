@@ -46,7 +46,7 @@ public:
 	void stop(void);
 	void setLocalId(QString* lpszLocalId);
 	void setCrypto(lmcCrypto* pCrypto);
-	void addConnection(QString* lpszUserId, QString* lpszAddress);
+	void addConnection(QString* lpszUserId, QString* lpszAddress, bool singleStreamPeer = false);
 	void sendMessage(QString* lpszReceiverId, QString* lpszData);
 	void initSendFile(QString* lpszReceiverId, QString* lpszAddress, QString* lpszData);
 	void initReceiveFile(QString* lpszSenderId, QString* lpszAddress, QString* lpszData);
@@ -63,6 +63,7 @@ signals:
 private slots:
 	void server_newConnection(void);
 	void socket_readyRead(void);
+	void socket_disconnected(void);
 	void socket_headerTimeout(void);
 	void msgStream_connectionLost(QString* lpszUserId);
 	void update(FileMode mode, FileOp op, FileType type, QString* lpszId, QString* lpszUserId, QString* lpszData);

@@ -259,14 +259,28 @@ FileReceiver::~FileReceiver(void) {
 }
 
 void FileReceiver::init(QTcpSocket* socket) {
-	this->socket = socket;
-	connect(socket, SIGNAL(disconnected()), this, SLOT(disconnected()));
-	connect(socket, SIGNAL(disconnected()), socket, SLOT(deleteLater()));
-	connect(this->socket, SIGNAL(readyRead()), this, SLOT(readyRead()));
+	if(!socket)
+		return;
+	if(this->socket) {
+		lmcTrace::write("Rejecting a second socket for file transfer " + id);
+		socket->disconnectFromHost();
+		return;
+	}
 
+	this->socket = socket;
+	// The receiver is the sole owner of an accepted socket. Do not also schedule
+	// the socket for independent deletion on disconnect: queued receiver work
+	// must never observe a dangling socket pointer.
+	socket->setParent(this);
+	connect(socket, SIGNAL(disconnected()), this, SLOT(disconnected()));
+	connect(socket, SIGNAL(readyRead()), this, SLOT(readyRead()));
+
+	lmcTrace::write("Initializing file receiver " + id + " from user " + peerId +
+		", Size: " + QString::number(fileSize));
 	receiveFile();
 	if(!active)
 		return;
+	lmcTrace::write("File receiver destination opened for " + id);
 	//	now send a START message to sender
 	if(socket->write("START") != 5) {
 		QString data;
@@ -283,8 +297,22 @@ void FileReceiver::init(QTcpSocket* socket) {
 		if(timer)
 			timer->stop();
 		file->close();
-		emit progressUpdated(FM_Receive, FO_Complete, type, &id, &peerId, &filePath);
+		lmcTrace::write("File receiver completion queued " + id + " from user " + peerId);
+		QTimer::singleShot(0, this, SLOT(complete()));
+		return;
 	}
+
+	lmcTrace::write("File receiver START sent for " + id);
+
+	// The sender may coalesce the header and first payload bytes into one TCP
+	// packet. Queue processing so completion cannot delete receiver state while
+	// the TCP header handler and init() are still on the stack.
+	if(socket->bytesAvailable() > 0)
+		QTimer::singleShot(0, this, SLOT(readyRead()));
+}
+
+bool FileReceiver::isInitialized(void) const {
+	return socket != NULL;
 }
 
 void FileReceiver::stop(void) {
@@ -308,6 +336,9 @@ void FileReceiver::stop(void) {
 void FileReceiver::disconnected(void) {
 	if(active) {
 		QString data;
+		// Stop first so queued readyRead/timer work becomes a no-op and the
+		// partial destination is closed before upper layers release the receiver.
+		stop();
 		emit progressUpdated(FM_Receive, FO_Error, type, &id, &peerId, &data);
 	}
 }
@@ -331,8 +362,12 @@ void FileReceiver::readyRead(void) {
 			if(timer)
 				timer->stop();
 			file->close();
-			socket->disconnectFromHost();
-			emit progressUpdated(FM_Receive, FO_Complete, type, &id, &peerId, &filePath);
+			disconnect(socket, SIGNAL(readyRead()), this, SLOT(readyRead()));
+			lmcTrace::write("File receiver completion queued " + id + " from user " + peerId);
+			// Leave QTcpSocket::readyRead before disconnecting the socket or
+			// notifying UI layers. Avatar completion can replace an image and
+			// repaint several windows, which must not re-enter socket teardown.
+			QTimer::singleShot(0, this, SLOT(complete()));
 			return;
 		}
 	}
@@ -342,6 +377,16 @@ void FileReceiver::readyRead(void) {
 //		emit progressUpdated(FM_Receive, FO_Progress, type, &id, &peerId, &transferred);
 //		milestone += mile;
 //	}
+}
+
+void FileReceiver::complete(void) {
+	lmcTrace::write("Finalizing file receiver " + id + " from user " + peerId);
+	if(socket && socket->state() != QAbstractSocket::UnconnectedState)
+		socket->disconnectFromHost();
+
+	lmcTrace::write("Dispatching file receiver completion " + id + " from user " + peerId);
+	emit progressUpdated(FM_Receive, FO_Complete, type, &id, &peerId, &filePath);
+	lmcTrace::write("File receiver completion dispatched " + id + " from user " + peerId);
 }
 
 void FileReceiver::timer_timeout(void) {
@@ -425,6 +470,9 @@ void MsgStream::init(void) {
 
 void MsgStream::init(QTcpSocket* socket) {
 	this->socket = socket;
+	// Incoming sockets were previously left parented to QTcpServer while the
+	// MsgStream itself had no owner. Give the stream sole lifetime ownership.
+	socket->setParent(this);
 	connect(socket, SIGNAL(disconnected()), this, SLOT(disconnected()));
 	connect(this->socket, SIGNAL(readyRead()), this, SLOT(readyRead()));
 	connect(socket, SIGNAL(bytesWritten(qint64)), this, SLOT(bytesWritten(qint64)));

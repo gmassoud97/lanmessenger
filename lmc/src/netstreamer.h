@@ -95,6 +95,7 @@ public:
 
 	void init(QTcpSocket* socket);
 	void stop(void);
+	bool isInitialized(void) const;
 	
 	QString id;
     QString peerId;
@@ -106,6 +107,7 @@ signals:
 private slots:
 	void disconnected(void);
 	void readyRead(void);
+	void complete(void);
 	void timer_timeout(void);
 
 private:

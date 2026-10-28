@@ -29,6 +29,7 @@
 #include <QTimer>
 #include <QSysInfo>
 #include <QPointer>
+#include <QSet>
 #include "shared.h"
 #include "settings.h"
 #include "messaging.h"
@@ -68,6 +69,7 @@ private slots:
 	void sendMessage(MessageType type, QString* lpszUserId, XmlMessage* pMessage);
 	void receiveMessage(MessageType type, QString* lpszUserId, XmlMessage* pMessage);
 	void connectionStateChanged(void);
+	void applicationStateChanged(Qt::ApplicationState state);
 	void showTransfers(void);
 	void showHistory(void);
 	void showSettings(void);
@@ -121,6 +123,7 @@ private:
 	QPointer<lmcUserSelectDialog>	pUserSelectDialog;
 	QPointer<lmcAboutDialog>		pAboutDialog;
 	QPointer<lmcBroadcastWindow>	pBroadcastWindow;
+	QSet<QString>					deferredAvatarUsers;
 	bool							messageTop;
 	bool							pubMessagePop;
 	QString							lang;
