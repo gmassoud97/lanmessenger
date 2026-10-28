@@ -223,6 +223,21 @@ Assert-Contains 'lmc/src/tcpnetwork.cpp' `
   'Ignoring duplicate incoming file offer' `
   'duplicate file offers must not create ambiguous receivers'
 
+# Windows lock/Modern Standby must not trigger contact reconnect and avatar
+# repaint storms while the interactive desktop is unavailable.
+Assert-Contains 'lmc/src/lmc.cpp' `
+  'Contact refresh deferred while application is inactive' `
+  'periodic contact refresh must pause while Windows is locked'
+Assert-Contains 'lmc/src/lmc.cpp' `
+  'Avatar UI refresh deferred while application is inactive' `
+  'avatar repainting must pause while Windows is locked'
+Assert-Contains 'lmc/src/lmc.cpp' `
+  'Application active; refreshing contacts and deferred avatars' `
+  'contacts and deferred avatars must refresh after unlock'
+Assert-Contains 'lmc/src/lmc.h' `
+  'QSet<QString>' `
+  'deferred avatar users must be deduplicated'
+
 # Logs must be directly accessible for crash diagnosis without asking users
 # to navigate hidden AppData folders manually.
 Assert-Contains 'lmc/src/mainwindow.cpp' `
